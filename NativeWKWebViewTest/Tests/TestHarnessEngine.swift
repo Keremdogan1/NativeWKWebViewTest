@@ -336,6 +336,12 @@ public final class TestHarnessEngine {
         }
     }
 
+    // Helper to format webView object pointer identity
+    private func webViewPointer(_ wv: WKWebView?) -> String {
+        guard let wv = wv else { return "<nil>" }
+        return "\(Unmanaged.passUnretained(wv).toOpaque())"
+    }
+
     // 4. Test H: Tab State Preservation
     private func runTestH_TabStatePreservation(tabManager: BrowserTabManager, completion: @escaping () -> Void) {
         guard let tab1 = tabManager.activeTab else {
@@ -345,10 +351,84 @@ public final class TestHarnessEngine {
         }
 
         let start = Date()
-        BrowserLogger.shared.log(.test, "[TEST H] Preparing initial state on Tab 1 (id: \(tab1.id.uuidString.prefix(6)))...")
+        let tab1Id = tab1.id.uuidString.prefix(6)
+        let wv1 = tab1.browser.webView
+        let wv1Ptr = webViewPointer(wv1)
 
-        let setupAndInjectState: () -> Void = {
-            let prepareStateScript = """
+        // H1 LOAD: Ensure test_nav.html is loaded and DOM is fully ready
+        let ensureLoadedAndReady: (@escaping () -> Void) -> Void = { nextStep in
+            let checkReadyScript = "(function() { return (document.readyState === 'complete') && (document.getElementById('stateInput') !== null || document.getElementById('tabStateInput') !== null); })()"
+            tab1.browser.evaluateJavaScript(checkReadyScript) { res in
+                let currentUrl = tab1.browser.webView.url?.absoluteString ?? "<nil>"
+                let currentTitle = tab1.browser.webView.title ?? "<nil>"
+                let isReady: Bool
+                switch res {
+                case .success(let val):
+                    isReady = (val as? Bool) ?? false
+                case .failure(let err):
+                    isReady = false
+                    BrowserLogger.shared.log(.error, "[H1 LOAD] Tab=\(tab1Id) Ready query failed: \(err.localizedDescription)")
+                }
+
+                if isReady {
+                    let logMsg = "[H1 LOAD] Tab=\(tab1Id) WebView=\(wv1Ptr) URL=\(currentUrl) Title='\(currentTitle)' -> Fixture is already READY."
+                    print(logMsg)
+                    BrowserLogger.shared.log(.test, logMsg)
+                    nextStep()
+                } else {
+                    let logMsg = "[H1 LOAD] Tab=\(tab1Id) WebView=\(wv1Ptr) URL=\(currentUrl) Title='\(currentTitle)' -> Fixture not ready; opening test_nav.html..."
+                    print(logMsg)
+                    BrowserLogger.shared.log(.test, logMsg)
+                    tab1.browser.open(URL(string: "https://local-suite.poc/test_nav.html")!)
+
+                    // Poll document readyState & input existence
+                    var attempts = 0
+                    func poll() {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                            guard let self = self else { return }
+                            attempts += 1
+                            tab1.browser.evaluateJavaScript(checkReadyScript) { pollRes in
+                                let ready: Bool
+                                switch pollRes {
+                                case .success(let val): ready = (val as? Bool) ?? false
+                                case .failure: ready = false
+                                }
+                                if ready {
+                                    let loadDoneMsg = "[H1 LOAD] Tab=\(tab1Id) WebView=\(wv1Ptr) Ready after \(attempts) poll(s) URL=\(tab1.browser.webView.url?.absoluteString ?? "")"
+                                    print(loadDoneMsg)
+                                    BrowserLogger.shared.log(.test, loadDoneMsg)
+                                    nextStep()
+                                } else if attempts >= 10 {
+                                    let elapsed = Date().timeIntervalSince(start) * 1000.0
+                                    let timeoutMsg = "[H1 LOAD] Tab=\(tab1Id) WebView=\(wv1Ptr) FAIL: Fixture page failed to become ready after \(attempts) polls (1.5s). Aborting test."
+                                    print(timeoutMsg)
+                                    BrowserLogger.shared.log(.error, timeoutMsg)
+                                    self.record(
+                                        id: "H",
+                                        status: .failRuntime,
+                                        evidence: timeoutMsg,
+                                        durationMs: elapsed,
+                                        errorMessage: "H1 LOAD timeout: fixture not ready"
+                                    )
+                                    completion()
+                                } else {
+                                    poll()
+                                }
+                            }
+                        }
+                    }
+                    poll()
+                }
+            }
+        }
+
+        ensureLoadedAndReady {
+            // H2 INJECT: Inject state values into Tab 1
+            let h2Log = "[H2 INJECT] Tab=\(tab1Id) WebView=\(wv1Ptr) Injecting token='PRESERVED_STATE_TOKEN', counter=9991, scrollY=200..."
+            print(h2Log)
+            BrowserLogger.shared.log(.test, h2Log)
+
+            let injectScript = """
             (function() {
                 var inp = document.getElementById('stateInput') || document.getElementById('tabStateInput');
                 if (!inp) {
@@ -367,16 +447,19 @@ public final class TestHarnessEngine {
             })();
             """
 
-            tab1.browser.evaluateJavaScript(prepareStateScript) { [weak self] res1 in
+            tab1.browser.evaluateJavaScript(injectScript) { [weak self] resInject in
                 guard let self = self else { return }
 
-                switch res1 {
+                switch resInject {
                 case .failure(let err):
                     let elapsed = Date().timeIntervalSince(start) * 1000.0
+                    let h3FailLog = "[H3 INJECT VERIFIED] Tab=\(tab1Id) WebView=\(wv1Ptr) FAIL: Injection script error: \(err.localizedDescription)"
+                    print(h3FailLog)
+                    BrowserLogger.shared.log(.error, h3FailLog)
                     self.record(
                         id: "H",
                         status: .failRuntime,
-                        evidence: "Failed to establish initial state on Tab 1 before tab switch: \(err.localizedDescription)",
+                        evidence: "Failed to establish initial state on Tab 1: \(err.localizedDescription)",
                         durationMs: elapsed,
                         errorMessage: "Initial state injection failed: \(err.localizedDescription)"
                     )
@@ -384,83 +467,129 @@ public final class TestHarnessEngine {
                     return
 
                 case .success(let val):
-                    BrowserLogger.shared.log(.test, "[TEST H] Tab 1 initial state established: \(val ?? "nil"). Creating Tab 2...")
+                    // H3 INJECT VERIFIED: Confirm WebKit acknowledged injection immediately
+                    let dict = val as? [String: Any]
+                    let injectedInput = dict?["inputVal"] as? String
+                    let injectedCounter = (dict?["counter"] as? NSNumber)?.intValue ?? (dict?["counter"] as? Int)
+                    let injectedScroll = (dict?["scrollY"] as? NSNumber)?.intValue ?? (dict?["scrollY"] as? Int) ?? 0
+
+                    let h3Log = "[H3 INJECT VERIFIED] Tab=\(tab1Id) WebView=\(wv1Ptr) Injected: token='\(injectedInput ?? "nil")' counter=\(injectedCounter ?? -1) scrollY=\(injectedScroll)"
+                    print(h3Log)
+                    BrowserLogger.shared.log(.test, h3Log)
+
+                    guard injectedInput == "PRESERVED_STATE_TOKEN", injectedCounter == 9991 else {
+                        let elapsed = Date().timeIntervalSince(start) * 1000.0
+                        let mismatchMsg = "Initial verification failed: received \(String(describing: val))"
+                        print("[H3 INJECT VERIFIED] FAIL: \(mismatchMsg)")
+                        self.record(
+                            id: "H",
+                            status: .failRuntime,
+                            evidence: mismatchMsg,
+                            durationMs: elapsed,
+                            errorMessage: mismatchMsg
+                        )
+                        completion()
+                        return
+                    }
                 }
 
-                // Create temporary Tab 2 and activate it (Tab 1 is hidden)
-                let tab2 = tabManager.createTab(url: URL(string: "https://local-suite.poc/test_popups.html"), activate: true)
-                BrowserLogger.shared.log(.test, "[TEST H] Tab 2 created (id: \(tab2.id.uuidString.prefix(6))). Tab 1 is now hidden.")
+                // H4 CREATE TAB 2: Create a second tab (Tab 1 is about to be backgrounded)
+                let tab2 = tabManager.createTab(url: URL(string: "https://local-suite.poc/test_popups.html"), activate: false)
+                let tab2Id = tab2.id.uuidString.prefix(6)
+                let wv2Ptr = self.webViewPointer(tab2.browser.webView)
+                let h4Log = "[H4 CREATE TAB 2] Tab2=\(tab2Id) WebView=\(wv2Ptr) TotalTabs=\(tabManager.tabs.count)"
+                print(h4Log)
+                BrowserLogger.shared.log(.test, h4Log)
+
+                // H5 ACTIVATE TAB 2: Switch focus to Tab 2
+                tabManager.activateTab(id: tab2.id)
+                let h5Log = "[H5 ACTIVATE TAB 2] ActiveTab=\(tabManager.activeTab?.id.uuidString.prefix(6) ?? "nil") Tab1Hidden=\(tab1.browser.webView.isHidden) Tab2Hidden=\(tab2.browser.webView.isHidden)"
+                print(h5Log)
+                BrowserLogger.shared.log(.test, h5Log)
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    // Switch back to Tab 1 (Tab 1 is made visible again)
-                    BrowserLogger.shared.log(.test, "[TEST H] Switching back to Tab 1 (id: \(tab1.id.uuidString.prefix(6)))...")
+                    // H6 ACTIVATE TAB 1: Switch focus back to Tab 1 & close Tab 2
                     tabManager.activateTab(id: tab1.id)
-
-                    // Close temporary Tab 2
                     tabManager.closeTab(id: tab2.id)
+                    let currentUrl = tab1.browser.webView.url?.absoluteString ?? "<nil>"
+                    let h6Log = "[H6 ACTIVATE TAB 1] ActiveTab=\(tabManager.activeTab?.id.uuidString.prefix(6) ?? "nil") Tab1Hidden=\(tab1.browser.webView.isHidden) Tab1WebView=\(wv1Ptr) URL=\(currentUrl)"
+                    print(h6Log)
+                    BrowserLogger.shared.log(.test, h6Log)
 
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        let verifyStateScript = """
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        let verifyAllScript = """
                         (function() {
                             var inp = document.getElementById('stateInput') || document.getElementById('tabStateInput');
                             return {
-                                inputVal: inp ? inp.value : null,
-                                counter: window.__v43_test_counter || null,
+                                token: inp ? inp.value : null,
+                                counter: window.__v43_test_counter !== undefined ? window.__v43_test_counter : null,
                                 scrollY: window.scrollY
                             };
-                        })();
+                        })()
                         """
 
-                        tab1.browser.evaluateJavaScript(verifyStateScript) { res2 in
-                            let elapsed = Date().timeIntervalSince(start) * 1000.0
+                        tab1.browser.evaluateJavaScript(verifyAllScript) { [weak self] resVerify in
+                            guard let self = self else { return }
 
-                            switch res2 {
+                            let dict: [String: Any]?
+                            switch resVerify {
                             case .success(let val):
-                                BrowserLogger.shared.log(.test, "[TEST H] Tab 1 restored state query result: \(val ?? "nil")")
-                                if let dict = val as? [String: Any],
-                                   let inputVal = dict["inputVal"] as? String, inputVal == "PRESERVED_STATE_TOKEN",
-                                   let counter = dict["counter"] as? Int, counter == 9991 {
-                                    let scrollY = (dict["scrollY"] as? NSNumber)?.intValue ?? 0
-                                    self.record(
-                                        id: "H",
-                                        status: .passRuntime,
-                                        evidence: "DOM input ('PRESERVED_STATE_TOKEN'), JS memory counter (9991), and scroll offset (\(scrollY)px) completely preserved across tab switch without page reload.",
-                                        durationMs: elapsed
-                                    )
-                                } else {
-                                    let received = String(describing: val)
-                                    self.record(
-                                        id: "H",
-                                        status: .failRuntime,
-                                        evidence: "DOM State lost during tab switch: \(received)",
-                                        durationMs: elapsed,
-                                        errorMessage: "State mismatch: expected input 'PRESERVED_STATE_TOKEN', received: \(received)"
-                                    )
-                                }
+                                dict = val as? [String: Any]
                             case .failure(let err):
+                                dict = nil
+                                BrowserLogger.shared.log(.error, "[H7-H9 VERIFY] JS Error: \(err.localizedDescription)")
+                            }
+
+                            // H7 VERIFY DOM TOKEN
+                            let tokenVal = dict?["token"] as? String
+                            let h7Log = "[H7 VERIFY DOM TOKEN] Tab=\(tab1Id) WebView=\(wv1Ptr) Expected='PRESERVED_STATE_TOKEN' Actual='\(tokenVal ?? "null")'"
+                            print(h7Log)
+                            BrowserLogger.shared.log(.test, h7Log)
+
+                            // H8 VERIFY JS COUNTER
+                            let counterVal = (dict?["counter"] as? NSNumber)?.intValue ?? (dict?["counter"] as? Int)
+                            let h8Log = "[H8 VERIFY JS COUNTER] Tab=\(tab1Id) WebView=\(wv1Ptr) Expected=9991 Actual=\(counterVal != nil ? String(counterVal!) : "null")"
+                            print(h8Log)
+                            BrowserLogger.shared.log(.test, h8Log)
+
+                            // H9 VERIFY SCROLL
+                            let scrollVal = (dict?["scrollY"] as? NSNumber)?.intValue ?? (dict?["scrollY"] as? Int) ?? 0
+                            let h9Log = "[H9 VERIFY SCROLL] Tab=\(tab1Id) WebView=\(wv1Ptr) ScrollY=\(scrollVal)px"
+                            print(h9Log)
+                            BrowserLogger.shared.log(.test, h9Log)
+
+                            // H10 RESULT
+                            let elapsed = Date().timeIntervalSince(start) * 1000.0
+                            let isTokenOk = (tokenVal == "PRESERVED_STATE_TOKEN")
+                            let isCounterOk = (counterVal == 9991)
+
+                            if isTokenOk && isCounterOk {
+                                let h10PassLog = "[H10 RESULT] PASS: State successfully preserved on Tab \(tab1Id) without reload. (Token='\(tokenVal!)', Counter=\(counterVal!), ScrollY=\(scrollVal)px)"
+                                print(h10PassLog)
+                                BrowserLogger.shared.log(.test, h10PassLog)
+                                self.record(
+                                    id: "H",
+                                    status: .passRuntime,
+                                    evidence: "DOM input ('PRESERVED_STATE_TOKEN'), JS memory counter (9991), and scroll offset (\(scrollVal)px) completely preserved across tab switch without page reload.",
+                                    durationMs: elapsed
+                                )
+                            } else {
+                                let diffDesc = "Token: expected 'PRESERVED_STATE_TOKEN', got '\(tokenVal ?? "null")'; Counter: expected 9991, got \(counterVal != nil ? String(counterVal!) : "null")"
+                                let h10FailLog = "[H10 RESULT] FAIL: \(diffDesc)"
+                                print(h10FailLog)
+                                BrowserLogger.shared.log(.error, h10FailLog)
                                 self.record(
                                     id: "H",
                                     status: .failRuntime,
-                                    evidence: "JS evaluation failed: \(err.localizedDescription)",
+                                    evidence: "State preservation mismatch: \(diffDesc)",
                                     durationMs: elapsed,
-                                    errorMessage: err.localizedDescription
+                                    errorMessage: "State mismatch: expected input 'PRESERVED_STATE_TOKEN', received \(diffDesc)"
                                 )
                             }
                             completion()
                         }
                     }
                 }
-            }
-        }
-
-        // Check if tab1 is already on test_nav
-        if let currentPath = tab1.browser.webView.url?.absoluteString, currentPath.contains("test_nav") {
-            setupAndInjectState()
-        } else {
-            BrowserLogger.shared.log(.test, "[TEST H] Loading test_nav.html onto Tab 1...")
-            tab1.browser.open(URL(string: "https://local-suite.poc/test_nav.html")!)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                setupAndInjectState()
             }
         }
     }
