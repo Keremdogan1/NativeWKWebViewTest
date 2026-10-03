@@ -958,6 +958,7 @@ public final class TestHarnessEngine {
                                                                                                        "============================================================"
                                                                                     print(finishBanner)
                                                                                     BrowserLogger.shared.log(.test, finishBanner)
+                                                                                    self.printSummaryReport()
                                                                                     completion()
                                                                                 }
                                                                             }
@@ -983,6 +984,28 @@ public final class TestHarnessEngine {
     // Compatibility method
     public func runAutomatedStorageAndSchemeTests(tabManager: BrowserTabManager, completion: @escaping () -> Void) {
         runAllAutomatedRuntimeTests(tabManager: tabManager, completion: completion)
+    }
+
+    // MARK: - Compact Console Summary Generator
+    public func printSummaryReport() {
+        var lines: [String] = []
+        lines.append("============================================================")
+        lines.append("=== TEST RESULT SUMMARY ===")
+        lines.append("============================================================")
+
+        for tc in testCases {
+            let durStr = tc.durationMs != nil ? String(format: "⏱ %.1f ms", tc.durationMs!) : (tc.requiresRealDevice ? "Device/Interactive" : "-")
+            let detail = tc.errorMessage != nil ? "ERROR: \(tc.errorMessage!)" : tc.evidence
+            lines.append("\(tc.id) | \(tc.status.rawValue) | \(durStr) | \(detail)")
+        }
+
+        lines.append("============================================================")
+        lines.append("=== END TEST RESULT SUMMARY ===")
+        lines.append("============================================================")
+
+        let summaryText = lines.joined(separator: "\n")
+        print(summaryText)
+        BrowserLogger.shared.log(.test, summaryText)
     }
 
     // MARK: - Markdown / Text Report Generator
