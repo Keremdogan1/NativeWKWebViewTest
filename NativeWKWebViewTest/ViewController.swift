@@ -67,7 +67,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         setupLoggerBinding()
 
         BrowserLogger.shared.log(.state, "V4.3 Multi-Tab Browser Engine initialized.")
-        BrowserLogger.shared.log(.state, "Shared WKProcessPool & WebsiteDataStore active.")
+        BrowserLogger.shared.log(.state, "Shared persistent WKWebsiteDataStore.default() active across tabs.")
         BrowserLogger.shared.log(.state, "Ready for target='_blank', window.open(), and tab management.")
 
         // Create initial default tab
@@ -681,7 +681,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
 
             <div class="card">
                 <h4>5. Shared Storage & Cookies Across Tabs</h4>
-                <p>Verify that localStorage and cookies are shared in real-time between tabs under the shared WKProcessPool.</p>
+                <p>Verify that localStorage and cookies are shared in real-time between tabs under the shared WKWebsiteDataStore.</p>
                 <button onclick="writeSharedData()">Write Shared Token</button>
                 <button onclick="readSharedData()">Read Shared Token</button>
                 <div id="storageResult" class="result">Storage output will appear here</div>

@@ -287,8 +287,29 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
     }
 
     public func close() {
+        progressObserver?.invalidate()
+        progressObserver = nil
+        titleObserver?.invalidate()
+        titleObserver = nil
+        urlObserver?.invalidate()
+        urlObserver = nil
+        secureObserver?.invalidate()
+        secureObserver = nil
+        canGoBackObserver?.invalidate()
+        canGoBackObserver = nil
+        canGoForwardObserver?.invalidate()
+        canGoForwardObserver = nil
+        loadingObserver?.invalidate()
+        loadingObserver = nil
+
         webView.stopLoading()
         webView.loadHTMLString("", baseURL: nil)
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.configuration.userContentController.removeAllUserScripts()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "diagnosticConsole")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nativeEngine")
+        webView.removeFromSuperview()
         BrowserLogger.shared.log(.state, "NativeBrowser closed / stopped.")
     }
 
@@ -318,6 +339,9 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
 
     public func setVisible(_ visible: Bool) {
         webView.isHidden = !visible
+        if visible {
+            webView.superview?.bringSubviewToFront(webView)
+        }
     }
 
     public func setTargetBlankPolicy(_ policy: TargetBlankPolicy) {
@@ -373,38 +397,6 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
         return downloadManager.getAllDownloads()
     }
 
-    // MARK: - Multi-Tab View & Lifecycle Support
-    public func setVisible(_ isVisible: Bool) {
-        webView.isHidden = !isVisible
-        if isVisible {
-            webView.superview?.bringSubviewToFront(webView)
-        }
-    }
-
-    public func close() {
-        progressObserver?.invalidate()
-        progressObserver = nil
-        titleObserver?.invalidate()
-        titleObserver = nil
-        urlObserver?.invalidate()
-        urlObserver = nil
-        secureObserver?.invalidate()
-        secureObserver = nil
-        canGoBackObserver?.invalidate()
-        canGoBackObserver = nil
-        canGoForwardObserver?.invalidate()
-        canGoForwardObserver = nil
-        loadingObserver?.invalidate()
-        loadingObserver = nil
-
-        webView.stopLoading()
-        webView.navigationDelegate = nil
-        webView.uiDelegate = nil
-        webView.configuration.userContentController.removeAllUserScripts()
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "diagnosticConsole")
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nativeEngine")
-        webView.removeFromSuperview()
-    }
 
     // MARK: - Internal Coordination
     func handleProcessTermination() {

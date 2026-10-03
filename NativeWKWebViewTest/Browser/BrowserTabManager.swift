@@ -5,9 +5,6 @@ import WebKit
 /// Manager orchestrating multi-tab lifecycle, active tab selection, and popup windows
 public final class BrowserTabManager: NSObject {
 
-    // Shared process pool ensuring fast shared cookie & networking cache across tabs
-    public static let sharedProcessPool = WKProcessPool()
-
     // MARK: - Properties
     public private(set) var tabs: [BrowserTab] = []
     public private(set) var activeTab: BrowserTab?
@@ -147,7 +144,6 @@ public final class BrowserTabManager: NSObject {
     // MARK: - Configuration Helper
     private func defaultConfiguration() -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
-        config.processPool = BrowserTabManager.sharedProcessPool
         config.websiteDataStore = WKWebsiteDataStore.default()
         return config
     }

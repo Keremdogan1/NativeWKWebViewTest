@@ -37,9 +37,9 @@ Web İçeriği (target="_blank" / window.open() / form POST target="_blank")
 2. **WebKit Popup Delegasyonu (`createWebViewWith`):**
    * WebKit tarafından sağlanan özel `configuration` nesnesi doğrudan yeni açılan sekmenin `NativeBrowser` örneğine geçirilir.
    * Bu sayede `target="_blank"` form POST verileri (POST body), HTTP header akışları ve `window.opener` JS köprüsü kesilmeden yeni sekmeye taşınır.
-3. **Paylaşımlı `WKProcessPool` & `WKWebsiteDataStore`:**
-   * Tüm sekmeler statik `BrowserTabManager.sharedProcessPool` ve `WKWebsiteDataStore.default()` paylaşır.
-   * Aynı origin altındaki sekmeler arasında `localStorage` ve çerezler anlık olarak senkronize kalır.
+3. **Kalıcı `WKWebsiteDataStore.default()` Mimarisi:**
+   * Tüm sekmeler Apple WebKit'in resmi kalıcı veri deposu olan `WKWebsiteDataStore.default()` üzerinde çalışır.
+   * `WKProcessPool` iOS 15 ile kullanımdan kalktığı (deprecated) için birden fazla processPool örneği WebKit sürecinde etkisizdir; sekmeler arası çerez, oturum ve `localStorage` paylaşımı doğrudan paylaşılan `WKWebsiteDataStore` üzerinden WebKit ağ süreci (network process) tarafından garanti edilir.
 4. **`window.close()` Kendi Kendini Kapatma:**
    * Sayfa içi JavaScript `window.close()` çağırdığında `BrowserUIDelegate.webViewDidClose` tetiklenir ve ilgili sekme `tabManager.closeTab(id:)` ile otomatik olarak bellekten kaldırılır.
 5. **Modern UIKit Sekme Çubuğu (Tab Bar):**
