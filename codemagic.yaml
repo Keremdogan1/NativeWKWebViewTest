@@ -1,0 +1,44 @@
+workflows:
+  ios-native-poc:
+    name: Native WKWebView Test Build
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "NativeWKWebViewTest.xcodeproj"
+        XCODE_SCHEME: "NativeWKWebViewTest"
+    scripts:
+      - name: Build unsigned iOS app (.app and .ipa)
+        script: |
+          set -e
+
+          echo "Building NativeWKWebViewTest for iphoneos (Release)..."
+          xcodebuild build \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphoneos \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+          # Locate built .app bundle
+          APP_PATH=$(find $HOME/Library/Developer/Xcode/DerivedData -name "NativeWKWebViewTest.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find . -name "NativeWKWebViewTest.app" | head -n 1)
+          fi
+
+          echo "Found built app bundle at: $APP_PATH"
+
+          # Package into installable unsigned .ipa for Sideloadly / AltStore / TrollStore
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          cd build
+          zip -r NativeWKWebViewTest.ipa Payload
+          cd ..
+
+          echo "Successfully created build/NativeWKWebViewTest.ipa"
+    artifacts:
+      - build/*.ipa
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
