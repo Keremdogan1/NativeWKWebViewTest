@@ -16,8 +16,12 @@ private class WeakScriptMessageHandlerProxy: NSObject, WKScriptMessageHandler {
     }
 }
 
-/// Core Native Browser Engine abstraction wrapping WebKit
+/// Core Native Browser Engine abstraction wrapping WebKit with WKContentWorld isolation
 public final class NativeBrowser: NSObject, WKScriptMessageHandler {
+
+    // MARK: - Isolated Content Worlds
+    public static let nativeBridgeWorldName = "NativeBridge"
+    public let nativeBridgeWorld = WKContentWorld.world(name: nativeBridgeWorldName)
 
     // MARK: - Public Properties
     public private(set) var webView: WKWebView!
@@ -51,16 +55,31 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
         super.init()
 
         let config = configuration ?? WKWebViewConfiguration()
+
+        // 1. Preferences & Window Settings
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        if #available(iOS 15.4, *) {
+            config.preferences.isElementFullscreenEnabled = true
+        }
+
+        // 2. Default Webpage Preferences
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+
+        // 3. Media Playback Configuration
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
+
+        // 4. Persistent Website Data Store
         config.websiteDataStore = WKWebsiteDataStore.default()
 
-        // JS Diagnostic & Console Bridge
+        // 5. User Content Controller & Isolated Content Worlds
         let userContentController = config.userContentController
-        let consoleForwarderScript = """
+
+        // A. Diagnostic Console Forwarder (Injected into .page world to observe page logs without breaking console)
+        let consoleForwarderScriptSource = """
         (function() {
-            if (window.__diagnosticBridgeInjected) return;
-            window.__diagnosticBridgeInjected = true;
+            if (window.__diagnosticConsoleInjected) return;
+            window.__diagnosticConsoleInjected = true;
 
             const send = (level, args) => {
                 try {
@@ -68,7 +87,9 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
                         try { return typeof a === 'object' ? JSON.stringify(a) : String(a); }
                         catch(e) { return String(a); }
                     }).join(' ');
-                    window.webkit.messageHandlers.diagnosticBridge.postMessage({ level: level, message: msg });
+                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.diagnosticConsole) {
+                        window.webkit.messageHandlers.diagnosticConsole.postMessage({ level: level, message: msg });
+                    }
                 } catch(e) {}
             };
 
@@ -80,18 +101,35 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
 
             const origError = console.error;
             console.error = function() { send('ERROR', arguments); origError.apply(console, arguments); };
+        })();
+        """
+        let consoleScript = WKUserScript(source: consoleForwarderScriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page)
+        userContentController.addUserScript(consoleScript)
+        userContentController.add(WeakScriptMessageHandlerProxy(handler: self), contentWorld: .page, name: "diagnosticConsole")
+
+        // B. Native Bridge Engine (Injected strictly into isolated NativeBridge world; unseen by page JS)
+        let nativeBridgeScriptSource = """
+        (function() {
+            if (window.__nativeBridgeInjected) return;
+            window.__nativeBridgeInjected = true;
 
             window.NativeEngine = {
-                postMessage: function(data) {
-                    window.webkit.messageHandlers.diagnosticBridge.postMessage({ level: 'CLIENT', message: JSON.stringify(data) });
+                postMessage: function(actionOrData, payload) {
+                    try {
+                        var action = (payload !== undefined) ? String(actionOrData) : 'EVENT';
+                        var data = (payload !== undefined) ? payload : actionOrData;
+                        window.webkit.messageHandlers.nativeBridge.postMessage({
+                            action: action,
+                            payload: data !== undefined ? data : null
+                        });
+                    } catch(e) {}
                 }
             };
         })();
         """
-
-        let userScript = WKUserScript(source: consoleForwarderScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-        userContentController.addUserScript(userScript)
-        userContentController.add(WeakScriptMessageHandlerProxy(handler: self), name: "diagnosticBridge")
+        let nativeBridgeScript = WKUserScript(source: nativeBridgeScriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: nativeBridgeWorld)
+        userContentController.addUserScript(nativeBridgeScript)
+        userContentController.add(WeakScriptMessageHandlerProxy(handler: self), contentWorld: nativeBridgeWorld, name: "nativeBridge")
 
         config.userContentController = userContentController
 
@@ -106,7 +144,7 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
         self.webView.uiDelegate = self.uiDelegate
 
         setupObservers()
-        BrowserLogger.shared.log(.state, "NativeBrowser V3 engine initialized.")
+        BrowserLogger.shared.log(.state, "NativeBrowser V4.1 initialized with WKContentWorld isolation.")
     }
 
     deinit {
@@ -118,7 +156,8 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
         canGoForwardObserver?.invalidate()
         loadingObserver?.invalidate()
 
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "diagnosticBridge")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nativeBridge", contentWorld: nativeBridgeWorld)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "diagnosticConsole", contentWorld: .page)
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         BrowserLogger.shared.log(.state, "NativeBrowser deallocated cleanly.")
@@ -176,17 +215,43 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
         }
     }
 
-    // MARK: - Script Message Handler
+    // MARK: - Script Message Handler & Security Validation
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "diagnosticBridge" else { return }
-        if let body = message.body as? [String: Any],
-           let level = body["level"] as? String,
-           let msg = body["message"] as? String {
-            BrowserLogger.shared.log(.js, "[\(level)] \(msg)")
-            emitEvent(.jsMessageReceived(level: level, message: msg))
-        } else {
-            BrowserLogger.shared.log(.js, "Raw message received: \(message.body)")
-            emitEvent(.jsMessageReceived(level: "RAW", message: "\(message.body)"))
+        let frameInfo = message.frameInfo
+        let isMain = frameInfo.isMainFrame
+        let secOrigin = frameInfo.securityOrigin
+        let originStr = "\(secOrigin.protocol)://\(secOrigin.host):\(secOrigin.port)"
+        let sourceUrl = frameInfo.request.url?.absoluteString ?? "unknown"
+
+        switch message.name {
+        case "nativeBridge":
+            // Strict Content World Verification
+            guard message.world == nativeBridgeWorld else {
+                BrowserLogger.shared.log(.error, "SECURITY REJECTED: nativeBridge message outside isolated world from \(originStr)")
+                return
+            }
+            guard let body = message.body as? [String: Any],
+                  let action = body["action"] as? String else {
+                BrowserLogger.shared.log(.error, "MALFORMED BRIDGE MESSAGE from \(originStr) (URL: \(sourceUrl))")
+                return
+            }
+            let payload = body["payload"] ?? "null"
+            BrowserLogger.shared.log(.js, "[BRIDGE] Action=\(action) MainFrame=\(isMain) Origin=\(originStr) Payload=\(payload)")
+            emitEvent(.jsMessageReceived(level: "BRIDGE:\(action)", message: "\(payload)"))
+
+        case "diagnosticConsole":
+            // Diagnostic console forwarding from page context
+            if let body = message.body as? [String: Any],
+               let level = body["level"] as? String,
+               let msg = body["message"] as? String {
+                BrowserLogger.shared.log(.js, "[\(level)] \(msg)")
+                emitEvent(.jsMessageReceived(level: level, message: msg))
+            } else {
+                BrowserLogger.shared.log(.js, "Raw console from \(originStr): \(message.body)")
+            }
+
+        default:
+            BrowserLogger.shared.log(.error, "UNKNOWN MESSAGE HANDLER: \(message.name) from \(originStr) (URL: \(sourceUrl))")
         }
     }
 
@@ -263,12 +328,13 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
         notifyStateChanged()
     }
 
-    public func evaluateJavaScript(_ script: String, completion: ((Result<Any?, Error>) -> Void)? = nil) {
-        webView.evaluateJavaScript(script) { result, error in
-            if let error = error {
-                completion?(.failure(error))
-            } else {
-                completion?(.success(result))
+    public func evaluateJavaScript(_ script: String, in contentWorld: WKContentWorld = .page, completion: ((Result<Any?, Error>) -> Void)? = nil) {
+        webView.evaluateJavaScript(script, in: nil, in: contentWorld) { result in
+            switch result {
+            case .success(let val):
+                completion?(.success(val))
+            case .failure(let err):
+                completion?(.failure(err))
             }
         }
     }
