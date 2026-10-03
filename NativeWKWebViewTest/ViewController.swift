@@ -79,6 +79,23 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         browser.onEvent = { event in
             // Events can trigger diagnostics or sound/haptics if needed
         }
+
+        browser.downloadManager.onDownloadUpdated = { [weak self] download in
+            guard let self = self else { return }
+            let pct = Int(download.progress * 100)
+            switch download.state {
+            case .downloading:
+                self.statusLabel.text = "Downloading [\(download.suggestedFilename)]: \(pct)%"
+            case .completed:
+                self.statusLabel.text = "Downloaded: \(download.suggestedFilename) (Saved to Documents/Downloads)"
+            case .failed:
+                self.statusLabel.text = "Download Failed: \(download.suggestedFilename) (\(download.errorDescription ?? ""))"
+            case .cancelled:
+                self.statusLabel.text = "Download Cancelled: \(download.suggestedFilename)"
+            case .pending:
+                self.statusLabel.text = "Download Pending: \(download.suggestedFilename)"
+            }
+        }
     }
 
     private func updateUI(with state: BrowserState) {
@@ -273,6 +290,17 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
             self?.loadStorageTestPage()
         }, for: .touchUpInside)
         stack.addArrangedSubview(testStorageBtn)
+
+        // 7. Test Downloads
+        let testDownloadBtn = UIButton(type: .system)
+        testDownloadBtn.setTitle(" 📥 Test Downloads ", for: .normal)
+        testDownloadBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
+        testDownloadBtn.backgroundColor = .secondarySystemBackground
+        testDownloadBtn.layer.cornerRadius = 6
+        testDownloadBtn.addAction(UIAction { [weak self] _ in
+            self?.loadDownloadTestPage()
+        }, for: .touchUpInside)
+        stack.addArrangedSubview(testDownloadBtn)
     }
 
     // MARK: - Setup Diagnostic Log Console
@@ -497,6 +525,82 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
                     const text = 'Cookie: ' + c + '\\nLS: ' + ls + '\\nSS: ' + ss;
                     console.log(text);
                     document.getElementById('output').innerText = text;
+                }
+            </script>
+        </body>
+        </html>
+        """
+        browser.loadHTMLString(html, baseURL: URL(string: "https://local-test.poc/"))
+    }
+
+    private func loadDownloadTestPage() {
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>V4.2 Download Engine Test Suite</title>
+            <style>
+                body { font-family: -apple-system, sans-serif; padding: 20px; line-height: 1.6; }
+                .card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+                a.btn, button { display: inline-block; padding: 8px 14px; background: #007aff; color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 13px; margin-top: 6px; cursor: pointer; }
+                h4 { margin: 0 0 6px 0; }
+                p { margin: 0; font-size: 13px; color: #555; }
+            </style>
+        </head>
+        <body>
+            <h3>V4.2 Native Download Engine Test Suite</h3>
+            <p style="margin-bottom: 16px;">Test WKDownload interception, filename sanitization, unicode, and sandbox persistence.</p>
+
+            <div class="card">
+                <h4>1. Plain Text File (.txt)</h4>
+                <p>Data URI text download with suggested filename.</p>
+                <a class="btn" href="data:text/plain;charset=utf-8,Hello%20from%20Obsidian%20Native%20Browser%20V4.2%20Download%20Engine!" download="notes.txt">Download notes.txt</a>
+            </div>
+
+            <div class="card">
+                <h4>2. HTML Report Document (.html)</h4>
+                <p>HTML formatted document download.</p>
+                <a class="btn" href="data:text/html;charset=utf-8,%3Ch1%3EObsidian%20V4.2%20Report%3C%2Fh1%3E%3Cp%3EDownload%20engine%20test%20passed.%3C%2Fp%3E" download="report.html">Download report.html</a>
+            </div>
+
+            <div class="card">
+                <h4>3. Unicode Filename (.txt)</h4>
+                <p>Testing non-ASCII characters in filename.</p>
+                <a class="btn" href="data:text/plain;charset=utf-8,Ogrenci%20belgesi%20ornek%20icerik" download="öğrenci_belgesi_2026.txt">Download öğrenci_belgesi_2026.txt</a>
+            </div>
+
+            <div class="card">
+                <h4>4. Filename With Spaces (.txt)</h4>
+                <p>Testing filenames containing spaces and parentheses.</p>
+                <a class="btn" href="data:text/plain;charset=utf-8,Test%20Content" download="My Project Report (Draft 2026).txt">Download My Project Report (Draft 2026).txt</a>
+            </div>
+
+            <div class="card">
+                <h4>5. Duplicate Filename Test (.txt)</h4>
+                <p>Repeatedly click to test collision auto-indexing: notes.txt -> notes (1).txt</p>
+                <a class="btn" href="data:text/plain;charset=utf-8,Duplicate%20Index%20Test" download="notes.txt">Download duplicate notes.txt</a>
+            </div>
+
+            <div class="card">
+                <h4>6. Simulated Binary Blob (.bin)</h4>
+                <p>Dynamically generated binary array blob.</p>
+                <button onclick="downloadBlob()">Generate & Download binary.bin</button>
+            </div>
+
+            <script>
+                function downloadBlob() {
+                    const bytes = new Uint8Array([0x50, 0x4B, 0x03, 0x04, 0x0A, 0x00, 0x00, 0x00]);
+                    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'archive.bin';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    console.log('Triggered blob download: archive.bin');
                 }
             </script>
         </body>

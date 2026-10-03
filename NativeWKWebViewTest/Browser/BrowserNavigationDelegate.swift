@@ -58,19 +58,55 @@ public final class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
         decisionHandler(.allow)
     }
 
-    // 2. Navigation Response & Security Header Inspection
+    // 2. Navigation Response, Security Header Inspection & Download Decision
     public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        if let httpResponse = navigationResponse.response as? HTTPURLResponse {
+        let response = navigationResponse.response
+        let mimeType = response.mimeType ?? "unknown"
+        let urlStr = response.url?.absoluteString ?? ""
+        var isAttachment = false
+
+        if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
-            let mimeType = httpResponse.mimeType ?? "unknown"
             let xFrameOptions = httpResponse.value(forHTTPHeaderField: "X-Frame-Options") ?? "none"
             let csp = httpResponse.value(forHTTPHeaderField: "Content-Security-Policy") != nil ? "present" : "none"
             let setCookie = httpResponse.value(forHTTPHeaderField: "Set-Cookie") != nil ? "present" : "none"
+            let contentDisposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+
+            if contentDisposition.lowercased().contains("attachment") {
+                isAttachment = true
+            }
 
             BrowserLogger.shared.log(.resp, "HTTP \(statusCode) [\(mimeType)] X-Frame: \(xFrameOptions) CSP: \(csp) Set-Cookie: \(setCookie)")
-            BrowserLogger.shared.log(.resp, " ↳ URL: \(httpResponse.url?.absoluteString ?? "")")
+            if !contentDisposition.isEmpty {
+                BrowserLogger.shared.log(.resp, " ↳ Content-Disposition: \(contentDisposition)")
+            }
+            BrowserLogger.shared.log(.resp, " ↳ URL: \(urlStr)")
         }
+
+        // Check if response qualifies for WKDownload
+        let cannotShow = !navigationResponse.canShowMIMEType
+        let ext = response.url?.pathExtension.lowercased() ?? ""
+        let binaryExtensions = ["zip", "tar", "gz", "tgz", "7z", "rar", "dmg", "pkg", "exe", "iso", "bin", "apk", "ipa"]
+        let isBinaryExtension = binaryExtensions.contains(ext)
+
+        if cannotShow || isAttachment || isBinaryExtension {
+            BrowserLogger.shared.log(.nav, "[DOWNLOAD] Triggering WKDownload (canShowMIME=\(!cannotShow), attachment=\(isAttachment), ext=\(ext))")
+            decisionHandler(.download)
+            return
+        }
+
         decisionHandler(.allow)
+    }
+
+    // Modern WKDownload lifecycle hooks (iOS 14.5+)
+    public func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        BrowserLogger.shared.log(.nav, "[DOWNLOAD] navigationResponse didBecome WKDownload.")
+        browser?.downloadManager.registerDownload(download, from: navigationResponse.response)
+    }
+
+    public func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        BrowserLogger.shared.log(.nav, "[DOWNLOAD] navigationAction didBecome WKDownload.")
+        browser?.downloadManager.registerDownload(download, from: nil)
     }
 
     // 3. Provisional & Finished Events

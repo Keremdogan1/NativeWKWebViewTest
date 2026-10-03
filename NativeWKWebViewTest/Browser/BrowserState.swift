@@ -69,4 +69,9 @@ public enum BrowserEvent {
     case popupRequested(url: URL?, policy: TargetBlankPolicy)
     case schemeRequested(scheme: String, url: URL?, allowed: Bool)
     case jsMessageReceived(level: String, message: String)
+    case downloadStarted(id: UUID, filename: String, url: URL?)
+    case downloadProgressChanged(id: UUID, progress: Double)
+    case downloadCompleted(id: UUID, filename: String, fileURL: URL)
+    case downloadFailed(id: UUID, error: String)
+    case downloadCancelled(id: UUID)
 }

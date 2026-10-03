@@ -39,6 +39,7 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
     // MARK: - Internal Delegates & Observers
     private var navigationDelegate: BrowserNavigationDelegate!
     private var uiDelegate: BrowserUIDelegate!
+    public private(set) var downloadManager: BrowserDownloadManager!
 
     private var progressObserver: NSKeyValueObservation?
     private var titleObserver: NSKeyValueObservation?
@@ -139,12 +140,13 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
 
         self.navigationDelegate = BrowserNavigationDelegate(browser: self)
         self.uiDelegate = BrowserUIDelegate(browser: self)
+        self.downloadManager = BrowserDownloadManager(browser: self)
 
         self.webView.navigationDelegate = self.navigationDelegate
         self.webView.uiDelegate = self.uiDelegate
 
         setupObservers()
-        BrowserLogger.shared.log(.state, "NativeBrowser V4.1 initialized with WKContentWorld isolation.")
+        BrowserLogger.shared.log(.state, "NativeBrowser V4.2 initialized with WKDownload engine.")
     }
 
     deinit {
@@ -359,6 +361,14 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
             self.reload()
             completion?()
         }
+    }
+
+    public func cancelDownload(id: UUID) {
+        downloadManager.cancelDownload(id: id)
+    }
+
+    public func getDownloads() -> [BrowserDownload] {
+        return downloadManager.getAllDownloads()
     }
 
     // MARK: - Internal Coordination
