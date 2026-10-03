@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V4.3 WebKit Test Suite Portal</title>
+    <style>
+        :root { --primary: #007aff; --bg: #f8f9fa; --card-bg: #ffffff; --border: #e2e8f0; --text: #1e293b; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 16px; margin: 0; line-height: 1.5; }
+        h2 { margin: 0 0 4px 0; font-size: 20px; color: #0f172a; }
+        p.subtitle { margin: 0 0 16px 0; font-size: 13px; color: #64748b; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+        .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .card h3 { margin: 0 0 6px 0; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
+        .badge { font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+        .badge-auto { background: #dcfce7; color: #166534; }
+        .badge-manual { background: #fef3c7; color: #92400e; }
+        p.desc { font-size: 12px; color: #475569; margin: 0 0 10px 0; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        button, a.btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; background: var(--primary); color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; }
+        button.secondary, a.btn.secondary { background: #e2e8f0; color: #334155; }
+        .result-box { margin-top: 8px; font-family: monospace; font-size: 11px; background: #f1f5f9; padding: 6px 8px; border-radius: 4px; display: none; }
+    </style>
+</head>
+<body>
+    <h2>🧪 V4.3 WebKit Test Suite</h2>
+    <p class="subtitle">Offline / Local Deterministic Test Harness for Multi-Tab & Native WKWebView Engine</p>
+
+    <div class="grid">
+        <!-- A. Basic Navigation -->
+        <div class="card">
+            <h3>A. Basic Navigation <span class="badge badge-auto">Auto/Interactive</span></h3>
+            <p class="desc">Tests local page-to-page navigation, back, forward, and reload operations.</p>
+            <div class="actions">
+                <a class="btn" href="test_nav.html">Open Navigation Fixture</a>
+            </div>
+        </div>
+
+        <!-- B. target="_blank" GET -->
+        <div class="card">
+            <h3>B. target="_blank" GET <span class="badge badge-auto">Auto</span></h3>
+            <p class="desc">Hyperlink with target="_blank". Verifies createWebViewWith intercepts and spawns new tab.</p>
+            <div class="actions">
+                <a class="btn" href="test_nav.html?test=blank_get" target="_blank" id="btnBlankGet">Launch GET New Tab</a>
+            </div>
+        </div>
+
+        <!-- C. target="_blank" POST -->
+        <div class="card">
+            <h3>C. target="_blank" POST <span class="badge badge-auto">Observed</span></h3>
+            <p class="desc">HTML form POST with target="_blank". Verifies form submission routing to new tab.</p>
+            <form action="test_popups.html?mode=post_target" method="POST" target="_blank" style="margin: 0;">
+                <input type="hidden" name="fixturePayload" value="V4.3_SECRET_POST_DATA_9988">
+                <input type="hidden" name="timestamp" id="postTimestamp" value="">
+                <button type="submit" onclick="document.getElementById('postTimestamp').value = Date.now()">Submit POST Form New Tab</button>
+            </form>
+        </div>
+
+        <!-- D & E. window.open (Immediate & Delayed) -->
+        <div class="card">
+            <h3>D & E. window.open Popups <span class="badge badge-auto">Auto</span></h3>
+            <p class="desc">Tests immediate synchronous popup vs 1000ms delayed asynchronous popup.</p>
+            <div class="actions">
+                <button onclick="testImmediateOpen()">Immediate open()</button>
+                <button class="secondary" onclick="testDelayedOpen()">Delayed open (1s)</button>
+            </div>
+            <div id="delayStatus" class="result-box"></div>
+        </div>
+
+        <!-- F & G. Multiple Popups & window.close -->
+        <div class="card">
+            <h3>F & G. Multi-Popup & Close <span class="badge badge-auto">Auto</span></h3>
+            <p class="desc">Spawns 3 simultaneous popups and tests window.close() self-termination.</p>
+            <div class="actions">
+                <button onclick="testTriplePopups()">Spawn 3 Popups</button>
+                <button class="secondary" onclick="testSelfClose()">window.close()</button>
+            </div>
+        </div>
+
+        <!-- H. Tab State Preservation -->
+        <div class="card">
+            <h3>H. Tab State Preservation <span class="badge badge-auto">Interactive</span></h3>
+            <p class="desc">Input values, scroll depth, and JS execution counter preserved across tab switches.</p>
+            <div class="actions">
+                <a class="btn" href="test_nav.html?test=state">Open Tab State Tester</a>
+            </div>
+        </div>
+
+        <!-- I, J, K, L. Storage Suite -->
+        <div class="card">
+            <h3>I - L. Storage & Cookies <span class="badge badge-auto">Shared</span></h3>
+            <p class="desc">Deterministic cookie, localStorage, IndexedDB, and sessionStorage tests.</p>
+            <div class="actions">
+                <a class="btn" href="test_storage.html">Open Storage Suite</a>
+            </div>
+        </div>
+
+        <!-- M. Download Engine -->
+        <div class="card">
+            <h3>M. WKDownload Engine <span class="badge badge-auto">Sandboxed</span></h3>
+            <p class="desc">Content-Disposition: attachment, MIME detection, progress and Documents/Downloads saving.</p>
+            <div class="actions">
+                <a class="btn" href="test_download.html">Open Download Fixtures</a>
+            </div>
+        </div>
+
+        <!-- N. JavaScript Dialogs -->
+        <div class="card">
+            <h3>N. JavaScript Dialogs <span class="badge badge-auto">Modal</span></h3>
+            <p class="desc">Verifies alert(), confirm(), and prompt() native UI presentation via BrowserUIDelegate.</p>
+            <div class="actions">
+                <a class="btn" href="test_dialogs.html">Open Dialog Fixtures</a>
+            </div>
+        </div>
+
+        <!-- O. Custom Schemes -->
+        <div class="card">
+            <h3>O. Custom Schemes <span class="badge badge-auto">Policy</span></h3>
+            <p class="desc">Tests custom URL scheme interception (vnd.test://) under Allow vs Block policies.</p>
+            <div class="actions">
+                <button onclick="window.location.href='vnd.test://action?param=123'">Trigger vnd.test://</button>
+            </div>
+        </div>
+
+        <!-- P. Invalid Navigation -->
+        <div class="card">
+            <h3>P. Invalid Navigation <span class="badge badge-auto">Failure</span></h3>
+            <p class="desc">Triggers non-resolvable domain to verify fail navigation handling and BrowserState.lastError.</p>
+            <div class="actions">
+                <button onclick="window.location.href='https://nonexistent-domain-test-404-xyz.invalid/'">Invalid Host</button>
+            </div>
+        </div>
+
+        <!-- Q. WebContent Process Crash -->
+        <div class="card">
+            <h3>Q. Process Crash & Recovery <span class="badge badge-manual">Manual / Real Device</span></h3>
+            <p class="desc">Simulating WebContent termination reliably requires low-memory jetsam or SIGKILL on device.</p>
+            <div class="actions">
+                <button class="secondary" onclick="alert('WebContent crash cannot be reliably triggered from inside standard unprivileged JS sandbox. Requires real device memory pressure or native SIGKILL.')">Crash Notice</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function testImmediateOpen() {
+            window.open('test_popups.html?mode=immediate', '_blank');
+        }
+
+        function testDelayedOpen() {
+            const box = document.getElementById('delayStatus');
+            box.style.display = 'block';
+            box.innerText = 'Timer running: opening popup in 1000ms...';
+            setTimeout(() => {
+                box.innerText = 'Triggering window.open() now...';
+                window.open('test_popups.html?mode=delayed', '_blank');
+            }, 1000);
+        }
+
+        function testTriplePopups() {
+            for (let i = 1; i <= 3; i++) {
+                window.open('test_popups.html?mode=multi&idx=' + i, '_blank');
+            }
+        }
+
+        function testSelfClose() {
+            window.close();
+        }
+    </script>
+</body>
+</html>

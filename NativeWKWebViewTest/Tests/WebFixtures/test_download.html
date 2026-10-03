@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WKDownload Engine Fixture</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 16px; line-height: 1.5; color: #1e293b; background: #fff; }
+        .box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        h3 { margin-top: 0; font-size: 15px; }
+        a.btn, button { display: inline-block; padding: 6px 12px; background: #007aff; color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="btn" style="background:#64748b; margin-bottom: 12px;">← Back to Suite Portal</a>
+
+    <h2>M. WKDownload Engine Fixture</h2>
+
+    <div class="box">
+        <h3>1. Text File Download (Data URI)</h3>
+        <p>Suggested filename: <code>fixture_notes.txt</code></p>
+        <a class="btn" href="data:text/plain;charset=utf-8,V4.3%20Local%20Fixture%20Download%20Content" download="fixture_notes.txt">Download fixture_notes.txt</a>
+    </div>
+
+    <div class="box">
+        <h3>2. Unicode Filename (.txt)</h3>
+        <p>Suggested filename: <code>türkçe_belge_2026.txt</code></p>
+        <a class="btn" href="data:text/plain;charset=utf-8,Unicode%20Filename%20Test" download="türkçe_belge_2026.txt">Download türkçe_belge_2026.txt</a>
+    </div>
+
+    <div class="box">
+        <h3>3. Binary Blob Stream (.bin)</h3>
+        <p>Dynamically generated octet-stream blob: <code>binary_archive.bin</code></p>
+        <button onclick="triggerBlobDownload()">Generate & Download binary_archive.bin</button>
+    </div>
+
+    <script>
+        function triggerBlobDownload() {
+            const data = new Uint8Array([0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]);
+            const blob = new Blob([data], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'binary_archive.bin';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            console.log('[TEST] Triggered binary blob download');
+        }
+    </script>
+</body>
+</html>

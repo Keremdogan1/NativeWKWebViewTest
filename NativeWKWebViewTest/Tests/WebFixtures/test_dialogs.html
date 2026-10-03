@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Dialogs Fixture</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 16px; line-height: 1.5; color: #1e293b; background: #fff; }
+        .box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        h3 { margin-top: 0; font-size: 15px; }
+        button, a.btn { display: inline-block; padding: 6px 12px; background: #007aff; color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; margin-right: 6px; }
+        .res { font-family: monospace; font-size: 12px; background: #f1f5f9; padding: 6px 8px; border-radius: 4px; margin-top: 6px; }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="btn" style="background:#64748b; margin-bottom: 12px;">← Back to Suite Portal</a>
+
+    <h2>N. JavaScript Dialog Panels Fixture</h2>
+
+    <div class="box">
+        <h3>1. window.alert()</h3>
+        <button onclick="triggerAlert()">Trigger alert()</button>
+        <div id="alertRes" class="res">Not triggered</div>
+    </div>
+
+    <div class="box">
+        <h3>2. window.confirm()</h3>
+        <button onclick="triggerConfirm()">Trigger confirm()</button>
+        <div id="confirmRes" class="res">Not triggered</div>
+    </div>
+
+    <div class="box">
+        <h3>3. window.prompt()</h3>
+        <button onclick="triggerPrompt()">Trigger prompt()</button>
+        <div id="promptRes" class="res">Not triggered</div>
+    </div>
+
+    <script>
+        function triggerAlert() {
+            alert("V4.3 Test Harness Alert Message");
+            document.getElementById('alertRes').innerText = "Alert dismissed by user";
+            console.log('[TEST] alert() completed');
+        }
+
+        function triggerConfirm() {
+            const res = confirm("Do you confirm this V4.3 WebKit action?");
+            document.getElementById('confirmRes').innerText = "Result: " + (res ? "CONFIRMED (true)" : "CANCELLED (false)");
+            console.log('[TEST] confirm() result:', res);
+        }
+
+        function triggerPrompt() {
+            const res = prompt("Please enter text:", "Sample Input 123");
+            document.getElementById('promptRes').innerText = "Result: " + (res !== null ? "ENTERED: '" + res + "'" : "CANCELLED (null)");
+            console.log('[TEST] prompt() result:', res);
+        }
+    </script>
+</body>
+</html>

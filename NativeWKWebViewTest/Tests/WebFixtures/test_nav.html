@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation & State Fixture</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 16px; line-height: 1.5; color: #1e293b; background: #fff; }
+        .box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+        h3 { margin-top: 0; font-size: 16px; }
+        button, a.btn { display: inline-block; padding: 6px 12px; background: #007aff; color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; }
+        input[type="text"] { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; width: 220px; }
+        .counter-badge { font-size: 18px; font-weight: bold; color: #007aff; font-family: monospace; }
+        .scroll-spacer { height: 1200px; background: linear-gradient(180deg, #f1f5f9 0%, #cbd5e1 100%); margin: 20px 0; border-radius: 8px; padding: 20px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="btn" style="background:#64748b; margin-bottom: 12px;">← Back to Suite Portal</a>
+
+    <h2>A & H. Navigation & Tab State Fixture</h2>
+
+    <div class="box">
+        <h3>1. Local Navigation Steps</h3>
+        <p>Test sequential local navigation, history stack push, back/forward functionality:</p>
+        <button onclick="window.location.href='test_nav.html?step=2'">Navigate to Step 2</button>
+        <button onclick="history.back()">history.back()</button>
+        <button onclick="history.forward()">history.forward()</button>
+        <button onclick="location.reload()">location.reload()</button>
+        <p id="navStepInfo" style="font-size: 12px; color: #64748b; margin-top: 8px;"></p>
+    </div>
+
+    <div class="box">
+        <h3>2. Tab State Preservation Test</h3>
+        <p>Type into the input, verify counter continues running, scroll down, switch tabs and return to verify retention.</p>
+        <div style="margin-bottom: 10px;">
+            <label>Input Field: </label>
+            <input type="text" id="stateInput" placeholder="Type 'TEST123' here..." value="TEST123">
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label>JavaScript Runtime Counter: </label>
+            <span id="counterVal" class="counter-badge">0</span>
+            <span style="font-size: 11px; color: #64748b;"> (Increments every second)</span>
+        </div>
+        <div>
+            <label>Current Scroll Y: </label>
+            <span id="scrollYVal" style="font-family: monospace; font-weight: bold;">0px</span>
+        </div>
+    </div>
+
+    <div class="scroll-spacer">
+        <p><strong>Scroll Depth Marker</strong></p>
+        <p>Scroll down here, switch to another tab, and switch back. The scroll offset must remain exactly here.</p>
+        <button onclick="window.scrollTo(0, 0)">Scroll Back to Top</button>
+    </div>
+
+    <script>
+        // Navigation step query param
+        const urlParams = new URLSearchParams(window.location.search);
+        const step = urlParams.get('step') || '1';
+        document.getElementById('navStepInfo').innerText = 'Current Location: Step ' + step + ' (' + window.location.href + ')';
+
+        // Counter execution
+        let count = 0;
+        setInterval(() => {
+            count++;
+            document.getElementById('counterVal').innerText = count;
+        }, 1000);
+
+        // Scroll listener
+        window.addEventListener('scroll', () => {
+            document.getElementById('scrollYVal').innerText = Math.round(window.scrollY) + 'px';
+        });
+    </script>
+</body>
+</html>

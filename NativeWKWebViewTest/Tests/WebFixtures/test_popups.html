@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Popup & Window.open Target Fixture</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 16px; line-height: 1.5; color: #1e293b; background: #fff; }
+        .box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+        h3 { margin-top: 0; font-size: 16px; }
+        button, a.btn { display: inline-block; padding: 6px 12px; background: #007aff; color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; }
+        button.danger { background: #ef4444; }
+        .info-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+        .info-table td { padding: 6px; border: 1px solid #e2e8f0; }
+        .info-table td:first-child { font-weight: bold; background: #f1f5f9; width: 35%; }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="btn" style="background:#64748b; margin-bottom: 12px;">← Back to Suite Portal</a>
+
+    <h2>Popups & Windows Fixture</h2>
+
+    <div class="box">
+        <h3>Popup Reception Details</h3>
+        <p>This tab was spawned via popup interception (target="_blank" or window.open).</p>
+        <table class="info-table">
+            <tr><td>Spawn Mode</td><td id="spawnMode">-</td></tr>
+            <tr><td>Current URL</td><td id="currentUrl">-</td></tr>
+            <tr><td>window.opener Available?</td><td id="openerStatus">-</td></tr>
+            <tr><td>HTTP Method Received</td><td id="httpMethodStatus">GET / Unknown (Static Page Context)</td></tr>
+        </table>
+    </div>
+
+    <div class="box">
+        <h3>G. window.close() Test</h3>
+        <p>Click below to execute <code>window.close()</code>. The Native UIDelegate must intercept webViewDidClose and destroy this tab.</p>
+        <button class="danger" onclick="triggerClose()">Close This Tab (window.close)</button>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const mode = params.get('mode') || 'direct';
+        const idx = params.get('idx') || '';
+        document.getElementById('spawnMode').innerText = mode + (idx ? ' (Popup #' + idx + ')' : '');
+        document.getElementById('currentUrl').innerText = window.location.href;
+
+        // Check window.opener
+        try {
+            const hasOpener = (window.opener !== null && window.opener !== undefined);
+            document.getElementById('openerStatus').innerText = hasOpener ? 'YES (Connected to Opener)' : 'NO / null (noopener)';
+        } catch(e) {
+            document.getElementById('openerStatus').innerText = 'Restricted / Exception: ' + e.message;
+        }
+
+        function triggerClose() {
+            console.log('[TEST] Executing window.close()');
+            window.close();
+        }
+    </script>
+</body>
+</html>

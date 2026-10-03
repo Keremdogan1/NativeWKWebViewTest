@@ -44,6 +44,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
 
     // Quick Test Sites
     private let testURLs = [
+        "https://local-suite.poc",
         "https://example.com",
         "https://www.google.com",
         "https://www.youtube.com",
@@ -68,10 +69,10 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
 
         BrowserLogger.shared.log(.state, "V4.3 Multi-Tab Browser Engine initialized.")
         BrowserLogger.shared.log(.state, "Shared persistent WKWebsiteDataStore.default() active across tabs.")
-        BrowserLogger.shared.log(.state, "Ready for target='_blank', window.open(), and tab management.")
+        BrowserLogger.shared.log(.state, "Offline local test suite available at https://local-suite.poc/")
 
-        // Create initial default tab
-        tabManager.createTab(url: URL(string: "https://example.com"), activate: true)
+        // Create initial default tab loading local test suite
+        tabManager.createTab(url: URL(string: "https://local-suite.poc/"), activate: true)
     }
 
     // MARK: - Setup Tab Manager & Browser Engine
@@ -104,6 +105,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
                 self.statusLabel.text = "Downloading [\(download.suggestedFilename)]: \(pct)%"
             case .completed:
                 self.statusLabel.text = "Downloaded: \(download.suggestedFilename) (Saved to Documents/Downloads)"
+                TestHarnessEngine.shared.record(id: "M", status: .pass, evidence: "Download completed successfully: \(download.suggestedFilename)")
             case .failed:
                 self.statusLabel.text = "Download Failed: \(download.suggestedFilename) (\(download.errorDescription ?? ""))"
             case .cancelled:
@@ -129,6 +131,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
 
         if let error = state.lastError {
             statusLabel.text = "Error: \(error)"
+            TestHarnessEngine.shared.record(id: "P", status: .pass, evidence: "Captured navigation error in BrowserState: \(error)")
         } else if state.isLoading {
             statusLabel.text = "Connecting..."
         } else {
@@ -428,6 +431,50 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
             self?.loadDownloadTestPage()
         }, for: .touchUpInside)
         stack.addArrangedSubview(testDownloadBtn)
+
+        // 9. Run Automated Local Sanity Suite
+        let runSanityBtn = UIButton(type: .system)
+        runSanityBtn.setTitle(" 🧪 Run Tests ", for: .normal)
+        runSanityBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .bold)
+        runSanityBtn.backgroundColor = .systemGreen.withAlphaComponent(0.2)
+        runSanityBtn.layer.cornerRadius = 6
+        runSanityBtn.addAction(UIAction { [weak self] _ in
+            guard let self = self else { return }
+            self.statusLabel.text = "Running local sanity tests..."
+            TestHarnessEngine.shared.runAutomatedStorageAndSchemeTests(tabManager: self.tabManager) {
+                DispatchQueue.main.async {
+                    self.statusLabel.text = "Local sanity tests complete. Check Dashboard / Logs."
+                }
+            }
+        }, for: .touchUpInside)
+        stack.addArrangedSubview(runSanityBtn)
+
+        // 10. Show Test Results Summary Dashboard
+        let resultsDashboardBtn = UIButton(type: .system)
+        resultsDashboardBtn.setTitle(" 📊 Test Dashboard ", for: .normal)
+        resultsDashboardBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .bold)
+        resultsDashboardBtn.backgroundColor = .systemPurple.withAlphaComponent(0.2)
+        resultsDashboardBtn.layer.cornerRadius = 6
+        resultsDashboardBtn.addAction(UIAction { [weak self] _ in
+            self?.showTestResultsModal()
+        }, for: .touchUpInside)
+        stack.addArrangedSubview(resultsDashboardBtn)
+    }
+
+    private func showTestResultsModal() {
+        let cases = TestHarnessEngine.shared.testCases
+        var report = "V4.3 WEBKIT TEST RESULTS SUMMARY\n\n"
+        for tc in cases {
+            report += "[\(tc.id)] \(tc.title): [\(tc.status.rawValue)]\n"
+            report += "   Evidence: \(tc.evidence)\n"
+            report += "   Real iPad: \(tc.requiresRealDevice ? "YES" : "NO")\n\n"
+        }
+        let alert = UIAlertController(title: "Test Suite Results", message: report, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Copy / OK", style: .default, handler: { _ in
+            UIPasteboard.general.string = report
+            BrowserLogger.shared.log(.test, "Test results copied to clipboard.")
+        }))
+        present(alert, animated: true)
     }
 
     // MARK: - Setup Diagnostic Log Console

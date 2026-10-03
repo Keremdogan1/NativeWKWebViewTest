@@ -10,6 +10,7 @@ public enum LogCategory: String, CaseIterable {
     case scheme = "[SCHEME]"
     case error = "[ERROR]"
     case state = "[STATE]"
+    case test = "[TEST]"
 }
 
 /// A structured entry in the browser diagnostic log

@@ -39,6 +39,16 @@ public final class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
         BrowserLogger.shared.log(.nav, "ACTION: type=\(navTypeStr) method=\(method) scheme=\(scheme) mainFrame=\(isMainFrame) targetNil=\(isTargetNil)")
         BrowserLogger.shared.log(.nav, " ↳ URL: \(urlStr)")
 
+        // Local Test Fixtures Interceptor (local-suite.poc)
+        if url?.host == "local-suite.poc" && isMainFrame && !isTargetNil {
+            let path = (url?.path.isEmpty == false && url?.path != "/") ? url!.path : "index.html"
+            let html = WebFixturesProvider.shared.html(for: path)
+            BrowserLogger.shared.log(.test, "Serving offline test fixture for: \(path) (Method: \(method))")
+            webView.loadHTMLString(html, baseURL: WebFixturesProvider.baseSuiteURL)
+            decisionHandler(.cancel)
+            return
+        }
+
         // Custom App Schemes Check
         if scheme != "http" && scheme != "https" && scheme != "about" && scheme != "data" {
             BrowserLogger.shared.log(.scheme, "Non-HTTP Scheme intercepted: \(scheme) (URL: \(urlStr))")

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage & Cookie Persistence Fixture</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 16px; line-height: 1.5; color: #1e293b; background: #fff; }
+        .box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        h3 { margin-top: 0; font-size: 15px; }
+        button, a.btn { display: inline-block; padding: 6px 12px; background: #007aff; color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; }
+        .res { font-family: monospace; font-size: 11px; background: #f1f5f9; padding: 6px 8px; border-radius: 4px; margin-top: 6px; word-break: break-all; }
+        .pass { color: #166534; font-weight: bold; }
+        .fail { color: #991b1b; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="btn" style="background:#64748b; margin-bottom: 12px;">← Back to Suite Portal</a>
+
+    <h2>I, J, K, L. Storage & Persistence Suite</h2>
+
+    <!-- Cookies -->
+    <div class="box">
+        <h3>I. Cookies (WKHTTPCookieStore)</h3>
+        <button onclick="writeCookie()">1. Write Cookie (Tab A)</button>
+        <button onclick="readCookie()">2. Read Cookie (Tab B)</button>
+        <div id="cookieRes" class="res">Cookie not checked yet</div>
+    </div>
+
+    <!-- LocalStorage -->
+    <div class="box">
+        <h3>J. localStorage (Persistent SQLite)</h3>
+        <button onclick="writeLS()">1. Write localStorage (Tab A)</button>
+        <button onclick="readLS()">2. Read localStorage (Tab B)</button>
+        <div id="lsRes" class="res">localStorage not checked yet</div>
+    </div>
+
+    <!-- IndexedDB -->
+    <div class="box">
+        <h3>K. IndexedDB (Structured Storage)</h3>
+        <button onclick="writeIDB()">1. Write IDB Record (Tab A)</button>
+        <button onclick="readIDB()">2. Read IDB Record (Tab B)</button>
+        <div id="idbRes" class="res">IndexedDB not checked yet</div>
+    </div>
+
+    <!-- SessionStorage -->
+    <div class="box">
+        <h3>L. sessionStorage (Browsing Context Isolation)</h3>
+        <p style="font-size: 12px; color: #64748b;">sessionStorage must be isolated between independent tabs, but inherited initially by window.open() popups.</p>
+        <button onclick="writeSS()">1. Write sessionStorage</button>
+        <button onclick="readSS()">2. Read sessionStorage</button>
+        <button onclick="window.open('test_storage.html?mode=ss_popup', '_blank')">3. Open Popup & Read SS</button>
+        <div id="ssRes" class="res">sessionStorage not checked yet</div>
+    </div>
+
+    <script>
+        const TEST_KEY = 'v43_fixture_token';
+
+        // 1. Cookies
+        function writeCookie() {
+            const val = 'cookie_' + Date.now();
+            document.cookie = TEST_KEY + '=' + encodeURIComponent(val) + '; path=/; max-age=86400';
+            document.getElementById('cookieRes').innerHTML = '<span class="pass">WROTE:</span> ' + val;
+            console.log('[TEST] Wrote cookie:', val);
+        }
+        function readCookie() {
+            const c = document.cookie;
+            const match = c.match(new RegExp('(^|; )' + TEST_KEY + '=([^;]*)'));
+            const val = match ? decodeURIComponent(match[2]) : null;
+            if (val) {
+                document.getElementById('cookieRes').innerHTML = '<span class="pass">PASS (Read Shared):</span> ' + val;
+            } else {
+                document.getElementById('cookieRes').innerHTML = '<span class="fail">FAIL:</span> Token not found in document.cookie';
+            }
+        }
+
+        // 2. LocalStorage
+        function writeLS() {
+            const val = 'ls_' + Date.now();
+            localStorage.setItem(TEST_KEY, val);
+            document.getElementById('lsRes').innerHTML = '<span class="pass">WROTE:</span> ' + val;
+            console.log('[TEST] Wrote localStorage:', val);
+        }
+        function readLS() {
+            const val = localStorage.getItem(TEST_KEY);
+            if (val) {
+                document.getElementById('lsRes').innerHTML = '<span class="pass">PASS (Read Shared):</span> ' + val;
+            } else {
+                document.getElementById('lsRes').innerHTML = '<span class="fail">FAIL:</span> Key not found in localStorage';
+            }
+        }
+
+        // 3. IndexedDB
+        function getDB(cb) {
+            const req = indexedDB.open('v43_test_db', 1);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('tokens')) {
+                    db.createObjectStore('tokens', { keyPath: 'id' });
+                }
+            };
+            req.onsuccess = (e) => cb(e.target.result);
+            req.onerror = (e) => console.error('IDB Open error', e);
+        }
+        function writeIDB() {
+            getDB((db) => {
+                const tx = db.transaction('tokens', 'readwrite');
+                const store = tx.objectStore('tokens');
+                const val = 'idb_' + Date.now();
+                store.put({ id: TEST_KEY, value: val });
+                tx.oncomplete = () => {
+                    document.getElementById('idbRes').innerHTML = '<span class="pass">WROTE:</span> ' + val;
+                    console.log('[TEST] Wrote IndexedDB record:', val);
+                };
+            });
+        }
+        function readIDB() {
+            getDB((db) => {
+                const tx = db.transaction('tokens', 'readonly');
+                const store = tx.objectStore('tokens');
+                const req = store.get(TEST_KEY);
+                req.onsuccess = () => {
+                    if (req.result) {
+                        document.getElementById('idbRes').innerHTML = '<span class="pass">PASS (Read Shared):</span> ' + req.result.value;
+                    } else {
+                        document.getElementById('idbRes').innerHTML = '<span class="fail">FAIL:</span> Record not found in IndexedDB';
+                    }
+                };
+            });
+        }
+
+        // 4. SessionStorage
+        function writeSS() {
+            const val = 'ss_' + Date.now();
+            sessionStorage.setItem(TEST_KEY, val);
+            document.getElementById('ssRes').innerHTML = '<span class="pass">WROTE:</span> ' + val;
+        }
+        function readSS() {
+            const val = sessionStorage.getItem(TEST_KEY);
+            document.getElementById('ssRes').innerHTML = val ? 'Value: ' + val : 'Value: (empty / isolated)';
+        }
+
+        // Auto read on load if popup mode
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('mode') === 'ss_popup') {
+            const ssVal = sessionStorage.getItem(TEST_KEY);
+            document.getElementById('ssRes').innerHTML = ssVal ? '<span class="pass">PASS: Inherited from opener</span>: ' + ssVal : '<span class="fail">Empty (Not inherited)</span>';
+        }
+    </script>
+</body>
+</html>

@@ -19,6 +19,8 @@
 		300000000000000000000017 /* BrowserDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* BrowserDownloadManager.swift */; };
 		300000000000000000000018 /* BrowserTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* BrowserTab.swift */; };
 		300000000000000000000019 /* BrowserTabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* BrowserTabManager.swift */; };
+		300000000000000000000020 /* WebFixturesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* WebFixturesProvider.swift */; };
+		300000000000000000000021 /* TestHarnessEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* TestHarnessEngine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +38,8 @@
 		200000000000000000000017 /* BrowserDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserDownloadManager.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* BrowserTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTab.swift; sourceTree = "<group>"; };
 		200000000000000000000019 /* BrowserTabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTabManager.swift; sourceTree = "<group>"; };
+		200000000000000000000020 /* WebFixturesProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFixturesProvider.swift; sourceTree = "<group>"; };
+		200000000000000000000021 /* TestHarnessEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHarnessEngine.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,12 +65,22 @@
 			isa = PBXGroup;
 			children = (
 				400000000000000000000010 /* Browser */,
+				400000000000000000000020 /* Tests */,
 				200000000000000000000001 /* AppDelegate.swift */,
 				200000000000000000000002 /* SceneDelegate.swift */,
 				200000000000000000000003 /* ViewController.swift */,
 				200000000000000000000004 /* Info.plist */,
 			);
 			path = NativeWKWebViewTest;
+			sourceTree = "<group>";
+		};
+		400000000000000000000020 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000020 /* WebFixturesProvider.swift */,
+				200000000000000000000021 /* TestHarnessEngine.swift */,
+			);
+			path = Tests;
 			sourceTree = "<group>";
 		};
 		400000000000000000000010 /* Browser */ = {
@@ -173,6 +187,8 @@
 				300000000000000000000017 /* BrowserDownloadManager.swift in Sources */,
 				300000000000000000000018 /* BrowserTab.swift in Sources */,
 				300000000000000000000019 /* BrowserTabManager.swift in Sources */,
+				300000000000000000000020 /* WebFixturesProvider.swift in Sources */,
+				300000000000000000000021 /* TestHarnessEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

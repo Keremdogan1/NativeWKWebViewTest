@@ -70,6 +70,16 @@ NativeWKWebViewTest/
 │   │   ├── BrowserNavigationDelegate.swift       # WKNavigationDelegate & Download kararları
 │   │   ├── BrowserUIDelegate.swift               # WKUIDelegate implementasyonu & Popup delegasyonu
 │   │   └── BrowserLogger.swift                   # Thread-safe teşhis loglama motoru
+│   ├── Tests/                                    # V4.3 Yerel / Çevrimdışı Test Suite Motoru
+│   │   ├── WebFixtures/                          # Local HTML test fixture'ları
+│   │   │   ├── index.html                        # Test portalı (A-Q testleri)
+│   │   │   ├── test_nav.html                     # Navigation ve Tab State testleri
+│   │   │   ├── test_popups.html                  # target=_blank & window.open testleri
+│   │   │   ├── test_storage.html                 # Cookies, LocalStorage, IndexedDB, SessionStorage
+│   │   │   ├── test_dialogs.html                 # alert, confirm, prompt dialogları
+│   │   │   └── test_download.html                # Sandboxed indirme fixture'ları
+│   │   ├── WebFixturesProvider.swift             # Gömülü/çevrimdışı fixture sağlayıcısı
+│   │   └── TestHarnessEngine.swift               # Test orkestrasyonu, kanıt ve raporlama
 │   ├── AppDelegate.swift                         # iOS uygulama yaşam döngüsü
 │   ├── SceneDelegate.swift                       # Programmatik UIWindow & NavigationController
 │   ├── ViewController.swift                      # Test Harness UI (Tab Bar & Test Suites)
@@ -105,19 +115,41 @@ var onDownloadUpdated: ((BrowserDownload) -> Void)?
 
 ---
 
-## 4. V4.3 Çok Sekmeli Test Sayfası Özellikleri
+## 4. V4.3 Çevrimdışı / Yerel WebKit Test Suite (A - Q)
 
-`📑 Test Multi-Tab` butonu tıklandığında aşağıdaki test senaryolarını içeren özel yerel harness yüklenir:
-1. **Standart `target="_blank"`:** Bağlantının yeni bir sekmede açılması.
-2. **`window.open()` (Anlık):** Kullanıcı tıklamasıyla senkron popup sekmesi oluşturma.
-3. **`window.open()` (1000ms Gecikmeli):** Asenkron zamanlayıcı (`setTimeout`) ardından WebKit popup yakalama kontrolü.
-4. **Form POST to New Tab:** `method="POST"` ve `target="_blank"` ile gönderilen form verisinin (POST body) yeni sekmeye taşınması.
-5. **Shared Storage & Cookies:** Bir sekmede yazılan `localStorage` ve `document.cookie` verisinin diğer sekmelerde okunabilmesi.
-6. **`window.close()`:** Sayfa içi script ile aktif sekmenin kendini kapatabilmesi.
+Uygulama açılışında varsayılan olarak `https://local-suite.poc/` üzerinden çalışan yerel test portalı yüklenir. Araç çubuğundaki `🧪 Run Tests` butonu otomatik testleri koştururken, `📊 Test Dashboard` butonu aşağıdaki tablonun anlık durumunu ekrana ve panoya (clipboard) kopyalar:
+
+| Test | Sonuç | Kanıt (Evidence) | Gerçek iPad Gerekli mi? |
+| :--- | :---: | :--- | :---: |
+| **A. Basic Navigation** | **PASS** | `local-suite.poc` sayfaları arası geçiş, `history.back/forward`, reload doğrulanır. | Hayır |
+| **B. target="_blank" GET** | **PASS** | `createWebViewWith` tetiklenir, yeni `BrowserTab` açılır, URL ve durum korunur. | Hayır |
+| **C. target="_blank" POST** | **UNKNOWN** | Form POST yeni sekmeye yönlendirilir; ancak sunucu tarafı POST body alımı yerel HTTP backend olmadan doğrulanamaz. | **Evet** |
+| **D. Immediate window.open()** | **PASS** | Kullanıcı jesti ile tetiklenen `window.open()` doğrudan yeni sekmeye açılır. | Hayır |
+| **E. Delayed window.open()** | **PASS** | `setTimeout(1000)` ile asenkron tetiklenen popup `javaScriptCanOpenWindowsAutomatically` sayesinde sekmeye yönlendirilir. | Hayır |
+| **F. Multiple Popups** | **PASS** | Eşzamanlı 3 popup 3 ayrı bağımsız `BrowserTab` üretir. | Hayır |
+| **G. window.close()** | **PASS** | Sayfa içi `window.close()` çağrısı `webViewDidClose` ile yakalanır, sekme kapatılır. | Hayır |
+| **H. Tab State Preservation** | **PASS** | Sekmeler arası geçişte reload olmaz; scroll pozisyonu, form metni ve JS counter korunur. | Hayır |
+| **I. Cookies Across Tabs** | **PASS** | `WKWebsiteDataStore.default().httpCookieStore` üzerinden sekmeler arası çerez paylaşımı doğrulanır. | Hayır |
+| **J. localStorage Across Tabs** | **PASS** | Aynı origin (`https://local-suite.poc/`) altında sekmeler arası canlı localStorage paylaşımı doğrulanır. | Hayır |
+| **K. IndexedDB Across Tabs** | **PASS** | Yapılandırılmış IndexedDB nesneleri sekmeler arasında ortaklaşa okunur/yazılır. | Hayır |
+| **L. sessionStorage Isolation** | **PASS** | Bağımsız sekmeler arası sessionStorage izoledir; `window.open` popup'ı opener kopyasını alır. | Hayır |
+| **M. WKDownload Engine** | **PASS** | `Content-Disposition: attachment`, Data URI ve binary blob indirmeleri `Documents/Downloads` dizinine yazılır. | Hayır |
+| **N. JavaScript Dialogs** | **PASS** | `alert()`, `confirm()`, `prompt()` panelleri `BrowserUIDialogPresenter` ile native UIKit alert'e dönüştürülür. | Hayır |
+| **O. Custom Scheme** | **PASS** | `vnd.test://` gibi şemalar `CustomSchemePolicy` (.observeOnly vs .blockExternal) ile denetlenir. | Hayır |
+| **P. Invalid Navigation** | **PASS** | Geçersiz ana makine navigasyon hatası `BrowserNavigationDelegate.didFailProvisionalNavigation` ve `BrowserState.lastError` ile yakalanır. | Hayır |
+| **Q. Process Termination** | **MANUAL** | Düşük bellek (jetsam) çökmesi unprivileged yerel JS ile simüle edilemez; gerçek cihaz/SIGKILL gerektirir. | **Evet** |
 
 ---
 
-## 5. Codemagic Build Alma
+## 5. Kalan Gerçek Cihaz Testleri (Remaining Real-Device Tests)
+
+1. **Canlı Sunucu POST Body Doğrulaması:** Gerçek bir HTTP POST uç noktasına (ör. `https://httpbin.org/post`) `target="_blank"` ile form verisi gönderip sunucunun döndürdüğü JSON cevabında form alanlarının eksiksiz geldiğinin doğrulanması.
+2. **WebKit OOM / Jetsam Crash Recovery:** Canlı iPad üzerinde yüksek bellek tüketimi oluşturularak `webContentProcessDidTerminate` olayının tetiklenmesi ve tarayıcının çökmeden sayfayı yeniden yüklediğinin doğrulanması.
+3. **iPadOS Multitasking & Split View:** iPad üzerinde Split View veya Slide Over modundayken sekme çubuğu, klavye etkileşimi ve webview yeniden boyutlandırma davranışlarının gözlemlenmesi.
+
+---
+
+## 6. Codemagic Build Alma
 
 ```bash
 xcodebuild build \
