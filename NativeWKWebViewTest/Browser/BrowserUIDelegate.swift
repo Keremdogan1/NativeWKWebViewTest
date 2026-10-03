@@ -34,16 +34,16 @@ public final class BrowserUIDelegate: NSObject, WKUIDelegate {
 
             // Test harness real-time evidence recording
             if navigationAction.navigationType == .linkActivated {
-                TestHarnessEngine.shared.record(id: "B", status: .pass, evidence: "createWebViewWith intercepted linkActivated -> new BrowserTab spawned")
+                TestHarnessEngine.shared.record(id: "B", status: .passRuntime, evidence: "createWebViewWith intercepted linkActivated -> new BrowserTab spawned")
             } else if navigationAction.navigationType == .formSubmitted {
-                TestHarnessEngine.shared.record(id: "C", status: .unknown, evidence: "Observed formSubmitted POST target=_blank routed to new tab, but server-side receipt cannot be verified without real HTTP backend")
+                TestHarnessEngine.shared.record(id: "C", status: .unknown, evidence: "Observed formSubmitted POST target=_blank routed to new tab; waiting for local HTTP server payload")
             } else if navigationAction.navigationType == .other {
-                TestHarnessEngine.shared.record(id: "D", status: .pass, evidence: "createWebViewWith intercepted window.open() -> new BrowserTab spawned")
+                TestHarnessEngine.shared.record(id: "D", status: .passRuntime, evidence: "createWebViewWith intercepted window.open() -> new BrowserTab spawned")
                 if targetUrlStr.contains("mode=delayed") {
-                    TestHarnessEngine.shared.record(id: "E", status: .pass, evidence: "Delayed setTimeout window.open() successfully intercepted and spawned tab")
+                    TestHarnessEngine.shared.record(id: "E", status: .passRuntime, evidence: "Delayed setTimeout window.open() successfully intercepted and spawned tab")
                 }
                 if targetUrlStr.contains("mode=multi") {
-                    TestHarnessEngine.shared.record(id: "F", status: .pass, evidence: "Concurrent popup created distinct BrowserTab")
+                    TestHarnessEngine.shared.record(id: "F", status: .passRuntime, evidence: "Concurrent popup created distinct BrowserTab")
                 }
             }
 
@@ -69,7 +69,7 @@ public final class BrowserUIDelegate: NSObject, WKUIDelegate {
         if let tabManager = browser?.tabManager,
            let currentTab = tabManager.tabs.first(where: { $0.browser.webView === webView }) {
             BrowserLogger.shared.log(.ui, "Closing tab [\(currentTab.id.uuidString.prefix(6))] due to window.close()")
-            TestHarnessEngine.shared.record(id: "G", status: .pass, evidence: "webViewDidClose intercepted for tab [\(currentTab.id.uuidString.prefix(6))], closed cleanly")
+            TestHarnessEngine.shared.record(id: "G", status: .passRuntime, evidence: "webViewDidClose intercepted for tab [\(currentTab.id.uuidString.prefix(6))], closed cleanly")
             tabManager.closeTab(id: currentTab.id)
         }
     }

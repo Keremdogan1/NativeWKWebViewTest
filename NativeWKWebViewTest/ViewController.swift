@@ -67,12 +67,19 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         setupLayout()
         setupLoggerBinding()
 
+        // Start embedded HTTP server on 127.0.0.1 for local POST body verification
+        EmbeddedHttpServer.shared.start()
+
         BrowserLogger.shared.log(.state, "V4.3 Multi-Tab Browser Engine initialized.")
         BrowserLogger.shared.log(.state, "Shared persistent WKWebsiteDataStore.default() active across tabs.")
         BrowserLogger.shared.log(.state, "Offline local test suite available at https://local-suite.poc/")
 
         // Create initial default tab loading local test suite
         tabManager.createTab(url: URL(string: "https://local-suite.poc/"), activate: true)
+    }
+
+    deinit {
+        EmbeddedHttpServer.shared.stop()
     }
 
     // MARK: - Setup Tab Manager & Browser Engine
@@ -105,7 +112,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
                 self.statusLabel.text = "Downloading [\(download.suggestedFilename)]: \(pct)%"
             case .completed:
                 self.statusLabel.text = "Downloaded: \(download.suggestedFilename) (Saved to Documents/Downloads)"
-                TestHarnessEngine.shared.record(id: "M", status: .pass, evidence: "Download completed successfully: \(download.suggestedFilename)")
+                TestHarnessEngine.shared.record(id: "M", status: .passRuntime, evidence: "Download completed successfully: \(download.suggestedFilename)")
             case .failed:
                 self.statusLabel.text = "Download Failed: \(download.suggestedFilename) (\(download.errorDescription ?? ""))"
             case .cancelled:
@@ -131,7 +138,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
 
         if let error = state.lastError {
             statusLabel.text = "Error: \(error)"
-            TestHarnessEngine.shared.record(id: "P", status: .pass, evidence: "Captured navigation error in BrowserState: \(error)")
+            TestHarnessEngine.shared.record(id: "P", status: .passRuntime, evidence: "Captured navigation error in BrowserState: \(error)")
         } else if state.isLoading {
             statusLabel.text = "Connecting..."
         } else {

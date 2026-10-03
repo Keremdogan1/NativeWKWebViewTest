@@ -3,11 +3,13 @@ import WebKit
 
 /// Status of an individual test case
 public enum TestStatus: String {
-    case pass = "PASS"
-    case fail = "FAIL"
+    case passRuntime = "PASS (runtime)"
+    case passStatic = "PASS (static)"
     case unknown = "UNKNOWN"
     case manual = "MANUAL"
+    case readyDevice = "READY (DEVICE REQ)"
     case notRun = "NOT RUN"
+    case fail = "FAIL"
 }
 
 /// A structured test case record in the V4.3 test harness
@@ -45,7 +47,7 @@ public final class TestHarnessEngine {
         testCases = [
             TestCase(id: "A", title: "Basic Navigation", category: "Navigation", status: .notRun, evidence: "Local step push, history.back/forward, reload", requiresRealDevice: false),
             TestCase(id: "B", title: "target='_blank' GET", category: "Popups", status: .notRun, evidence: "createWebViewWith intercepted and new tab created", requiresRealDevice: false),
-            TestCase(id: "C", title: "target='_blank' POST", category: "Popups", status: .unknown, evidence: "POST body server-side verification unavailable offline (tab opened via formSubmitted)", requiresRealDevice: true),
+            TestCase(id: "C", title: "target='_blank' POST", category: "Popups", status: .unknown, evidence: "COMPILE VERIFIED: Embedded 127.0.0.1 HTTP server ready; runtime POST execution awaits device", requiresRealDevice: true),
             TestCase(id: "D", title: "window.open immediate", category: "Popups", status: .notRun, evidence: "Synchronous user-gesture window.open() intercepted as new tab", requiresRealDevice: false),
             TestCase(id: "E", title: "window.open delayed", category: "Popups", status: .notRun, evidence: "Async setTimeout(1000ms) window.open() allowed by preferences", requiresRealDevice: false),
             TestCase(id: "F", title: "Multiple Popups", category: "Popups", status: .notRun, evidence: "3 concurrent popups creating 3 distinct BrowserTabs", requiresRealDevice: false),
@@ -82,7 +84,7 @@ public final class TestHarnessEngine {
         // 1. Basic Tab Manager Integrity (Test A)
         let initialCount = tabManager.tabs.count
         if initialCount >= 1 {
-            record(id: "A", status: .pass, evidence: "Tab manager operational, \(initialCount) active tab(s) registered.")
+            record(id: "A", status: .passStatic, evidence: "Tab manager operational, \(initialCount) active tab(s) registered.")
         } else {
             record(id: "A", status: .fail, evidence: "Tab manager has 0 tabs.")
         }
@@ -90,7 +92,7 @@ public final class TestHarnessEngine {
         // 2. Custom Scheme Block/Allow Verification (Test O)
         if let browser = tabManager.activeTab?.browser {
             browser.setCustomSchemePolicy(.blockExternal)
-            record(id: "O", status: .pass, evidence: "Custom scheme policy verified (.blockExternal / .observeOnly enforceable).")
+            record(id: "O", status: .passStatic, evidence: "Custom scheme policy verified (.blockExternal / .observeOnly enforceable).")
         }
 
         // 3. Storage & Cookie Store Verification (Tests I, J, K, L)
@@ -98,7 +100,7 @@ public final class TestHarnessEngine {
             guard let self = self else { return }
 
             // Cookie Store is live
-            self.record(id: "I", status: .pass, evidence: "WKWebsiteDataStore.default().httpCookieStore reachable across tabs. (\(cookies.count) cookies present)")
+            self.record(id: "I", status: .passStatic, evidence: "WKWebsiteDataStore.default().httpCookieStore reachable across tabs. (\(cookies.count) cookies present)")
 
             // Evaluate JS localStorage & IndexedDB in active tab
             if let activeBrowser = tabManager.activeTab?.browser {
@@ -117,26 +119,30 @@ public final class TestHarnessEngine {
                 activeBrowser.evaluateJavaScript(jsCheck) { result in
                     switch result {
                     case .success(let val):
-                        self.record(id: "J", status: .pass, evidence: "localStorage API confirmed available and responsive under WKWebsiteDataStore.")
-                        self.record(id: "K", status: .pass, evidence: "IndexedDB API confirmed available and responsive under WKWebsiteDataStore.")
-                        self.record(id: "L", status: .pass, evidence: "sessionStorage context verified active.")
+                        self.record(id: "J", status: .passStatic, evidence: "localStorage API confirmed available and responsive under WKWebsiteDataStore.")
+                        self.record(id: "K", status: .passStatic, evidence: "IndexedDB API confirmed available and responsive under WKWebsiteDataStore.")
+                        self.record(id: "L", status: .passStatic, evidence: "sessionStorage context verified active.")
                     case .failure(let err):
                         self.record(id: "J", status: .fail, evidence: "JS evaluation failed: \(err.localizedDescription)")
                     }
 
                     // 4. Download Engine Readiness (Test M)
                     let downloads = tabManager.activeTab?.browser.getDownloads() ?? []
-                    self.record(id: "M", status: .pass, evidence: "WKDownloadManager initialized with sandboxed Documents/Downloads directory. Active/historic: \(downloads.count)")
+                    self.record(id: "M", status: .passStatic, evidence: "WKDownloadManager initialized with sandboxed Documents/Downloads directory. Active/historic: \(downloads.count)")
 
                     // 5. JavaScript Dialog Readiness (Test N)
                     if tabManager.dialogPresenter != nil {
-                        self.record(id: "N", status: .pass, evidence: "BrowserUIDialogPresenter protocol implemented and bound to UI hierarchy.")
+                        self.record(id: "N", status: .passStatic, evidence: "BrowserUIDialogPresenter protocol implemented and bound to UI hierarchy.")
                     } else {
                         self.record(id: "N", status: .fail, evidence: "DialogPresenter not bound.")
                     }
 
                     // 6. Explicitly record POST & Process termination according to strict honesty rules
-                    self.record(id: "C", status: .unknown, evidence: "Observed navigationAction.formSubmitted, but offline server-side POST body receipt cannot be verified without real backend.")
+                    if EmbeddedHttpServer.shared.isRunning {
+                        self.record(id: "C", status: .readyDevice, evidence: "Embedded 127.0.0.1 HTTP server running on port \(EmbeddedHttpServer.shared.port). Awaiting runtime POST submission from web view.")
+                    } else {
+                        self.record(id: "C", status: .unknown, evidence: "Embedded HTTP server not running.")
+                    }
                     self.record(id: "Q", status: .manual, evidence: "WebContent process crash recovery cannot be safely simulated via unprivileged local fixture. Requires physical device jetsam / native SIGKILL.")
 
                     BrowserLogger.shared.log(.test, "Automated local sanity checks completed.")

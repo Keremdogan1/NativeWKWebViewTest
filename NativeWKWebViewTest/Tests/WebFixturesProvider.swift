@@ -78,12 +78,12 @@ public final class WebFixturesProvider {
             </div>
 
             <div class="card">
-                <h3>C. target="_blank" POST <span class="badge badge-auto">Observed</span></h3>
-                <p class="desc">HTML form POST with target="_blank". Verifies form submission routing to new tab.</p>
-                <form action="test_popups.html?mode=post_target" method="POST" target="_blank" style="margin: 0;">
-                    <input type="hidden" name="fixturePayload" value="V4.3_SECRET_POST_DATA_9988">
-                    <input type="hidden" name="timestamp" id="postTimestamp" value="">
-                    <button type="submit" onclick="document.getElementById('postTimestamp').value = Date.now()">Submit POST Form New Tab</button>
+                <h3>C. target="_blank" POST <span class="badge badge-auto">Loopback Server</span></h3>
+                <p class="desc">Deterministic form POST to embedded 127.0.0.1 HTTP server. Verifies body preservation in new tab.</p>
+                <form id="postForm" action="http://127.0.0.1:8089/verify-post" method="POST" target="_blank" style="margin: 0;">
+                    <input type="hidden" name="testKey" value="V4_3_POST_TEST">
+                    <input type="hidden" name="testValue" value="POST_BODY_PRESERVED">
+                    <button type="submit" onclick="preparePostForm()">Submit POST to 127.0.0.1</button>
                 </form>
             </div>
 
@@ -186,6 +186,13 @@ public final class WebFixturesProvider {
 
             function testSelfClose() {
                 window.close();
+            }
+
+            function preparePostForm() {
+                const params = new URLSearchParams(window.location.search);
+                const port = params.get('serverPort') || '8089';
+                document.getElementById('postForm').action = 'http://127.0.0.1:' + port + '/verify-post';
+                console.log('[TEST] Prepared POST action: http://127.0.0.1:' + port + '/verify-post');
             }
         </script>
     </body>

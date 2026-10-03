@@ -79,11 +79,12 @@ NativeWKWebViewTest/
 │   │   │   ├── test_dialogs.html                 # alert, confirm, prompt dialogları
 │   │   │   └── test_download.html                # Sandboxed indirme fixture'ları
 │   │   ├── WebFixturesProvider.swift             # Gömülü/çevrimdışı fixture sağlayıcısı
-│   │   └── TestHarnessEngine.swift               # Test orkestrasyonu, kanıt ve raporlama
+│   │   ├── TestHarnessEngine.swift               # Test orkestrasyonu, kanıt ve raporlama
+│   │   └── EmbeddedHttpServer.swift              # Network.framework 127.0.0.1 gömülü HTTP sunucusu (POST doğrulama)
 │   ├── AppDelegate.swift                         # iOS uygulama yaşam döngüsü
 │   ├── SceneDelegate.swift                       # Programmatik UIWindow & NavigationController
 │   ├── ViewController.swift                      # Test Harness UI (Tab Bar & Test Suites)
-│   └── Info.plist                                # Güvenlik & Scene tanımları
+│   └── Info.plist                                # Güvenlik, ATS (Local Networking) & Scene tanımları
 ├── codemagic.yaml                                # Codemagic macOS M2 build konfigürasyonu
 ├── CODEMAGIC_SETUP.md                            # Codemagic paneli adım adım kurulum rehberi
 ├── V4_WEBKIT_RESEARCH.md                         # Kapsamlı V4 araştırma ve yol haritası dokümanı
@@ -115,29 +116,40 @@ var onDownloadUpdated: ((BrowserDownload) -> Void)?
 
 ---
 
-## 4. V4.3 Çevrimdışı / Yerel WebKit Test Suite (A - Q)
+## 4. V4.3 Gömülü Loopback HTTP Sunucusu (Network.framework)
 
-Uygulama açılışında varsayılan olarak `https://local-suite.poc/` üzerinden çalışan yerel test portalı yüklenir. Araç çubuğundaki `🧪 Run Tests` butonu otomatik testleri koştururken, `📊 Test Dashboard` butonu aşağıdaki tablonun anlık durumunu ekrana ve panoya (clipboard) kopyalar:
+`target="_blank" POST` doğrulaması için dış internet bağımlılığı (httpbin.org vb.) veya üçüncü taraf kütüphaneler (CocoaPods/SPM) kullanılmaz. Apple'ın saf `Network.framework` kütüphanesi ile `127.0.0.1` (loopback) üzerinde çalışan `EmbeddedHttpServer` implemente edilmiştir:
 
-| Test | Sonuç | Kanıt (Evidence) | Gerçek iPad Gerekli mi? |
+* **Dinleme:** `NWListener` ile `127.0.0.1:8089` (meşgulse dinamik port) üzerinde yerel soket açılır.
+* **ATS:** `Info.plist` içinde `NSAppTransportSecurity -> NSAllowsLocalNetworking: true` ayarı ile yerel bağlantıya izin verilir.
+* **POST Body Doğrulama:** `testKey=V4_3_POST_TEST` ve `testValue=POST_BODY_PRESERVED` verileri akıştan parse edilip doğrulanır ve JSON olarak geri döndürülür (`{"verified": true}`).
+* **Gerçek Zamanlı Sonuç:** Sunucu gövdeyi aldığında `TestHarnessEngine` otomatik olarak `PASS (runtime)` kaydeder.
+
+---
+
+## 5. V4.3 Çevrimdışı / Yerel WebKit Test Suite (A - Q)
+
+Uygulama açılışında varsayılan olarak `https://local-suite.poc/` üzerinden çalışan yerel test portalı yüklenir. Araç çubuğundaki `🧪 Run Tests` butonu otomatik testleri koştururken, `📊 Test Dashboard` butonu anlık durum tablosunu ekrana ve panoya (clipboard) kopyalar:
+
+| Test | Durum | Ayrım / Kanıt (Evidence) | Gerçek Cihaz Gerekli mi? |
 | :--- | :---: | :--- | :---: |
-| **A. Basic Navigation** | **PASS** | `local-suite.poc` sayfaları arası geçiş, `history.back/forward`, reload doğrulanır. | Hayır |
-| **B. target="_blank" GET** | **PASS** | `createWebViewWith` tetiklenir, yeni `BrowserTab` açılır, URL ve durum korunur. | Hayır |
-| **C. target="_blank" POST** | **UNKNOWN** | Form POST yeni sekmeye yönlendirilir; ancak sunucu tarafı POST body alımı yerel HTTP backend olmadan doğrulanamaz. | **Evet** |
-| **D. Immediate window.open()** | **PASS** | Kullanıcı jesti ile tetiklenen `window.open()` doğrudan yeni sekmeye açılır. | Hayır |
-| **E. Delayed window.open()** | **PASS** | `setTimeout(1000)` ile asenkron tetiklenen popup `javaScriptCanOpenWindowsAutomatically` sayesinde sekmeye yönlendirilir. | Hayır |
-| **F. Multiple Popups** | **PASS** | Eşzamanlı 3 popup 3 ayrı bağımsız `BrowserTab` üretir. | Hayır |
-| **G. window.close()** | **PASS** | Sayfa içi `window.close()` çağrısı `webViewDidClose` ile yakalanır, sekme kapatılır. | Hayır |
-| **H. Tab State Preservation** | **PASS** | Sekmeler arası geçişte reload olmaz; scroll pozisyonu, form metni ve JS counter korunur. | Hayır |
-| **I. Cookies Across Tabs** | **PASS** | `WKWebsiteDataStore.default().httpCookieStore` üzerinden sekmeler arası çerez paylaşımı doğrulanır. | Hayır |
-| **J. localStorage Across Tabs** | **PASS** | Aynı origin (`https://local-suite.poc/`) altında sekmeler arası canlı localStorage paylaşımı doğrulanır. | Hayır |
-| **K. IndexedDB Across Tabs** | **PASS** | Yapılandırılmış IndexedDB nesneleri sekmeler arasında ortaklaşa okunur/yazılır. | Hayır |
-| **L. sessionStorage Isolation** | **PASS** | Bağımsız sekmeler arası sessionStorage izoledir; `window.open` popup'ı opener kopyasını alır. | Hayır |
-| **M. WKDownload Engine** | **PASS** | `Content-Disposition: attachment`, Data URI ve binary blob indirmeleri `Documents/Downloads` dizinine yazılır. | Hayır |
-| **N. JavaScript Dialogs** | **PASS** | `alert()`, `confirm()`, `prompt()` panelleri `BrowserUIDialogPresenter` ile native UIKit alert'e dönüştürülür. | Hayır |
-| **O. Custom Scheme** | **PASS** | `vnd.test://` gibi şemalar `CustomSchemePolicy` (.observeOnly vs .blockExternal) ile denetlenir. | Hayır |
-| **P. Invalid Navigation** | **PASS** | Geçersiz ana makine navigasyon hatası `BrowserNavigationDelegate.didFailProvisionalNavigation` ve `BrowserState.lastError` ile yakalanır. | Hayır |
-| **Q. Process Termination** | **MANUAL** | Düşük bellek (jetsam) çökmesi unprivileged yerel JS ile simüle edilemez; gerçek cihaz/SIGKILL gerektirir. | **Evet** |
+| **A. Basic Navigation** | **PASS (static)** | `CODE_INFERRED`: TabManager başlatıldı ve en az 1 sekme kayıtlı. | Hayır |
+| **B. target="_blank" GET** | **READY (DEVICE REQ)** | `CODE_INFERRED`: `BrowserUIDelegate.createWebViewWith` ile yeni sekme rotası hazır. Cihazda tıklama anında `PASS (runtime)`. | **Evet** (Etkileşim) |
+| **C. target="_blank" POST** | **READY (DEVICE REQ)** | `BUILD VERIFIED`: Gömülü `127.0.0.1` HTTP sunucusu ve form fixture hazır. Cihazda submit anında `PASS (runtime)`. | **Evet** (Etkileşim) |
+| **D. Immediate window.open()** | **READY (DEVICE REQ)** | `CODE_INFERRED`: `createWebViewWith` tetiklenmesi için cihazda buton dokunuşu gerekir. | **Evet** (Etkileşim) |
+| **E. Delayed window.open()** | **READY (DEVICE REQ)** | `CODE_INFERRED`: `setTimeout(1000)` popup'ı cihazda dokunuşla başlatılır. | **Evet** (Etkileşim) |
+| **F. Multiple Popups** | **READY (DEVICE REQ)** | `CODE_INFERRED`: Eşzamanlı 3 sekme açılışı cihazda dokunuşla başlatılır. | **Evet** (Etkileşim) |
+| **G. window.close()** | **READY (DEVICE REQ)** | `CODE_INFERRED`: `webViewDidClose` sekme kapatma rotası hazır; cihazda dokunuşla tetiklenir. | **Evet** (Etkileşim) |
+| **H. Tab State Preservation** | **READY (DEVICE REQ)** | `CODE_INFERRED`: Form/kaydırma/sayaç fixture'ı hazır; sekmeler arası geçişte doğrulanır. | **Evet** (Etkileşim) |
+| **I. Cookies Across Tabs** | **PASS (static)** | `CODE_INFERRED`: `WKWebsiteDataStore.default().httpCookieStore` erişilebilirliği doğrulandı. | Hayır |
+| **J. localStorage Across Tabs** | **PASS (static)** | `CODE_INFERRED`: JavaScript evaluate ile `localStorage` API varlığı ve yanıtı doğrulandı. | Hayır |
+| **K. IndexedDB Across Tabs** | **PASS (static)** | `CODE_INFERRED`: JavaScript evaluate ile `indexedDB` API varlığı ve yanıtı doğrulandı. | Hayır |
+| **L. sessionStorage Isolation** | **PASS (static)** | `CODE_INFERRED`: JavaScript evaluate ile `sessionStorage` API varlığı doğrulandı. | Hayır |
+| **M. WKDownload Engine** | **PASS (static)** | `CODE_INFERRED`: `WKDownloadManager` sanal dosya sistemiyle hazır. Cihazda dosya indiğinde `PASS (runtime)`. | Hayır |
+| **N. JavaScript Dialogs** | **PASS (static)** | `CODE_INFERRED`: `BrowserUIDialogPresenter` protokolü UI hiyerarşisine bağlı. | Hayır |
+| **O. Custom Scheme** | **PASS (static)** | `CODE_INFERRED`: `vnd.test://` politikaları (.blockExternal / .observeOnly) doğrulandı. | Hayır |
+| **P. Invalid Navigation** | **READY (DEVICE REQ)** | `CODE_INFERRED`: Hatalı URL navigasyonu ve `BrowserState.lastError` yakalama cihazda denenir. | **Evet** (Etkileşim) |
+| **Q. Process Termination** | **MANUAL** | `STATIC_ONLY`: Düşük bellek (jetsam) çökmesi unprivileged yerel JS ile simüle edilemez; gerçek cihaz/SIGKILL gerektirir. | **Evet** |
 
 ---
 

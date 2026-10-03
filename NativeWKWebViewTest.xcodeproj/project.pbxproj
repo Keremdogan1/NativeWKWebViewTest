@@ -21,6 +21,7 @@
 		300000000000000000000019 /* BrowserTabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* BrowserTabManager.swift */; };
 		300000000000000000000020 /* WebFixturesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* WebFixturesProvider.swift */; };
 		300000000000000000000021 /* TestHarnessEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* TestHarnessEngine.swift */; };
+		300000000000000000000022 /* EmbeddedHttpServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* EmbeddedHttpServer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		200000000000000000000019 /* BrowserTabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTabManager.swift; sourceTree = "<group>"; };
 		200000000000000000000020 /* WebFixturesProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFixturesProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000021 /* TestHarnessEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHarnessEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000022 /* EmbeddedHttpServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddedHttpServer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +81,7 @@
 			children = (
 				200000000000000000000020 /* WebFixturesProvider.swift */,
 				200000000000000000000021 /* TestHarnessEngine.swift */,
+				200000000000000000000022 /* EmbeddedHttpServer.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -189,6 +192,7 @@
 				300000000000000000000019 /* BrowserTabManager.swift in Sources */,
 				300000000000000000000020 /* WebFixturesProvider.swift in Sources */,
 				300000000000000000000021 /* TestHarnessEngine.swift in Sources */,
+				300000000000000000000022 /* EmbeddedHttpServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
