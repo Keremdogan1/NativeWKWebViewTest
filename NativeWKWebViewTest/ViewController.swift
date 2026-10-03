@@ -76,6 +76,7 @@ class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, UITe
     private var isLogExpanded = false
     private var logHeightConstraint: NSLayoutConstraint?
     private var allLogEntries: [(category: LogCategory, text: String)] = []
+    private var lastTerminationDate: Date?
 
     // MARK: - Quick Test Sites
     private let testURLs = [
@@ -638,7 +639,14 @@ class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, UITe
 
     // 5. Crash Resiliency
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        log(.error, "CRITICAL: WebContent process terminated (OOM/Crash). Reloading...")
+        log(.error, "CRITICAL: WebContent process terminated (OOM/Crash).")
+        let now = Date()
+        if let last = lastTerminationDate, now.timeIntervalSince(last) < 3.0 {
+            log(.error, "RAPID CRASH LOOP DETECTED: Suppressing auto-reload to prevent CPU lockup.")
+            statusLabel.text = "Process Crash Loop: Reload paused."
+            return
+        }
+        lastTerminationDate = now
         statusLabel.text = "Process Terminated. Reloading..."
         webView.reload()
     }

@@ -13,7 +13,7 @@ Bu sürüm (V2), basit bir webview açılışının ötesine geçerek native Web
 1. **Derin Ağ ve HTTP Yanıt Denetimi (`WKNavigationDelegate`):**
    * İstek tipi ayrıştırması (`linkActivated`, `formSubmitted`, `backForward`, `reload`, `formResubmitted`, `other`).
    * HTTP yanıt kodu (`200`, `301`, `302`, `404` vb.) ve MIME type loglaması.
-   * Sunucu güvenlik başlıkları (`X-Frame-Options`, `Content-Security-Policy`, `Set-Cookie`) denetimi. *(Top-level WKWebView'in X-Frame başlıklarını yok sayıp Google/YouTube'u açabildiğini doğrular).*
+   * Sunucu güvenlik başlıkları (`X-Frame-Options`, `Content-Security-Policy`, `Set-Cookie`) denetimi. *(X-Frame-Options ve CSP frame-ancestors direktifleri yalnızca bir dokümanın iframe/frame içine embed edilmesini kısıtlar; top-level browsing context navigasyonunda bu kısıtlamalar semantik olarak işletilmez. Bu log, iframe ile top-level WKWebView arasındaki temel mimari farkı somut olarak belgeler).*
    * Sunucu yönlendirme takibi (`didReceiveServerRedirectForProvisionalNavigation`).
    * SSL & Sunucu sertifikası kimlik doğrulama zorlukları (`didReceive challenge`).
    * WebContent işlem çökmesi ve bellek tükenmesi kurtarması (`webContentProcessDidTerminate`).
