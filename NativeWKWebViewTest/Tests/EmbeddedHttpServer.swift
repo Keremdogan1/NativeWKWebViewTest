@@ -172,8 +172,9 @@ public final class EmbeddedHttpServer {
                 self?.onPostPayloadReceived?(receivedBody, isVerified)
                 TestHarnessEngine.shared.record(
                     id: "C",
-                    status: isVerified ? .passRuntime : .fail,
-                    evidence: "[LOCAL HTTP SERVER] \(evidence)"
+                    status: isVerified ? .passRuntime : .failRuntime,
+                    evidence: "[LOCAL HTTP SERVER] \(evidence)",
+                    errorMessage: isVerified ? nil : "POST body missing expected payload keys"
                 )
             }
 
