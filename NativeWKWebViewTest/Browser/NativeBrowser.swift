@@ -36,6 +36,8 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
         set { uiDelegate.dialogPresenter = newValue }
     }
 
+    public weak var tabManager: BrowserTabManager?
+
     // MARK: - Internal Delegates & Observers
     private var navigationDelegate: BrowserNavigationDelegate!
     private var uiDelegate: BrowserUIDelegate!
@@ -369,6 +371,39 @@ public final class NativeBrowser: NSObject, WKScriptMessageHandler {
 
     public func getDownloads() -> [BrowserDownload] {
         return downloadManager.getAllDownloads()
+    }
+
+    // MARK: - Multi-Tab View & Lifecycle Support
+    public func setVisible(_ isVisible: Bool) {
+        webView.isHidden = !isVisible
+        if isVisible {
+            webView.superview?.bringSubviewToFront(webView)
+        }
+    }
+
+    public func close() {
+        progressObserver?.invalidate()
+        progressObserver = nil
+        titleObserver?.invalidate()
+        titleObserver = nil
+        urlObserver?.invalidate()
+        urlObserver = nil
+        secureObserver?.invalidate()
+        secureObserver = nil
+        canGoBackObserver?.invalidate()
+        canGoBackObserver = nil
+        canGoForwardObserver?.invalidate()
+        canGoForwardObserver = nil
+        loadingObserver?.invalidate()
+        loadingObserver = nil
+
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.configuration.userContentController.removeAllUserScripts()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "diagnosticConsole")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nativeEngine")
+        webView.removeFromSuperview()
     }
 
     // MARK: - Internal Coordination

@@ -17,6 +17,8 @@
 		300000000000000000000015 /* NativeBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* NativeBrowser.swift */; };
 		300000000000000000000016 /* BrowserDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* BrowserDownload.swift */; };
 		300000000000000000000017 /* BrowserDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* BrowserDownloadManager.swift */; };
+		300000000000000000000018 /* BrowserTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* BrowserTab.swift */; };
+		300000000000000000000019 /* BrowserTabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* BrowserTabManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +34,8 @@
 		200000000000000000000015 /* NativeBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBrowser.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* BrowserDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserDownload.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* BrowserDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserDownloadManager.swift; sourceTree = "<group>"; };
+		200000000000000000000018 /* BrowserTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTab.swift; sourceTree = "<group>"; };
+		200000000000000000000019 /* BrowserTabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTabManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,6 +79,8 @@
 				200000000000000000000015 /* NativeBrowser.swift */,
 				200000000000000000000016 /* BrowserDownload.swift */,
 				200000000000000000000017 /* BrowserDownloadManager.swift */,
+				200000000000000000000018 /* BrowserTab.swift */,
+				200000000000000000000019 /* BrowserTabManager.swift */,
 			);
 			path = Browser;
 			sourceTree = "<group>";
@@ -165,6 +171,8 @@
 				300000000000000000000015 /* NativeBrowser.swift in Sources */,
 				300000000000000000000016 /* BrowserDownload.swift in Sources */,
 				300000000000000000000017 /* BrowserDownloadManager.swift in Sources */,
+				300000000000000000000018 /* BrowserTab.swift in Sources */,
+				300000000000000000000019 /* BrowserTabManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

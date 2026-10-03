@@ -1,52 +1,52 @@
-# NativeWKWebViewTest (V4.2 Modular Browser-Engine Architecture)
+# NativeWKWebViewTest (V4.3 Multi-Tab & Window Management Architecture)
 
-Bağımsız, saf Swift ve `WebKit.framework` (`WKWebView`) yerel tarayıcı motoru test harness'ı, modüler tarayıcı motoru soyutlaması ve yerel dosya indirme motoru.
+Bağımsız, saf Swift ve `WebKit.framework` (`WKWebView`) yerel tarayıcı motoru test harness'ı, modüler tarayıcı motoru soyutlaması, yerel dosya indirme motoru ve çok sekmeli (multi-tab / window management) mimari.
 
 Bu projenin temel amacı, **Windows PC'den GitHub → Codemagic CI/CD → macOS/Xcode → iPadOS** zinciri üzerinden derlenip, ileride Obsidian için geliştirilecek native browser overlay mimarisinin teknik fizibilitesini canlı iPad üzerinde doğrulamaktır.
 
 ---
 
-## 1. V4.2 Yerel İndirme Motoru ve Mimari Genel Bakış
+## 1. V4.3 Çok Sekmeli (Multi-Tab) Mimari ve Popup Yönetimi
 
-V4.2 sürümü, WebKit'in resmi **`WKDownload`** API ailesini ve izole **`BrowserDownloadManager`** katmanını sisteme kazandırır:
+V4.3 sürümü, bağımsız sekmelerin yönetildiği **`BrowserTab`**, merkezi sekme orkestrasyonunu üstlenen **`BrowserTabManager`**, ve WebKit'in popup mekanizmasını sekme açılışına bağlayan **`BrowserUIDelegate`** entegrasyonunu sisteme kazandırır:
 
 ```text
-Kullanıcı Linke Tıklar / Sunucu Dosya Sunar
-               │
-               ▼
-BrowserNavigationDelegate: decidePolicyFor navigationResponse
-  ├── canShowMIMEType == false ?
-  ├── Content-Disposition: attachment ?
-  └── Binary dosya uzantıları (.zip, .pdf, .bin vb.) ?
-               │
-               ├─► [Standart Sayfa]      ──► decisionHandler(.allow)
-               │
-               └─► [İndirilebilir Dosya] ──► decisionHandler(.download)
-                                                   │
-                                                   ▼
-                                     BrowserDownloadManager (WKDownloadDelegate)
-                                       ├── Filename Sanitization & Path Traversal Koruması
-                                       ├── Hedef: Documents/Downloads (Güvenli Sandbox)
-                                       ├── Çakışma Önleme (notes.txt -> notes (1).txt)
-                                       ├── Progress KVO Observation (\.fractionCompleted)
-                                       ├── HTTP Redirection & Auth Challenge Desteği
-                                       └── BrowserEvent (.downloadStarted / .downloadCompleted vb.)
+Web İçeriği (target="_blank" / window.open() / form POST target="_blank")
+                                │
+                                ▼
+         BrowserUIDelegate.createWebViewWith(configuration:for:windowFeatures:)
+                                │
+             ┌──────────────────┴──────────────────┐
+             ▼                                     ▼
+[tabManager == nil (Fallback)]        [tabManager != nil (V4.3 Multi-Tab)]
+             │                                     │
+   Policy Kontrolü                     BrowserTabManager.handlePopupRequest(config)
+   ├── .rerouteSameView: Aynı view                │
+   └── .block: Reddet                             ├── 1. WKWebView(frame: .zero, configuration: passedConfig)
+                                                   ├── 2. POST body, stream & opener ilişkisi korunur
+                                                   ├── 3. Yeni BrowserTab üretilir ve container'a eklenir
+                                                   ├── 4. Yeni sekme otomatik aktifleşir (bringToFront)
+                                                   └── 5. Dönen WKWebView WebKit çekirdeğine iletilir
 ```
 
-### V4.2 Temel Yenilikleri:
-1. **`WKDownload` & `WKDownloadDelegate` Entegrasyonu:**
-   * `decidePolicyFor navigationResponse` içinde WebKit'in doğrudan render edemediği MIME tipleri veya `Content-Disposition: attachment` başlığı taşıyan yanıtlar otomatik olarak `decisionHandler(.download)` kararıyla yakalanır.
-   * `webView(_:navigationResponse:didBecome:)` delegasyonu üzerinden gelen `WKDownload` nesnesi `BrowserDownloadManager` tarafından yönetilir.
-2. **iOS Sandbox ve Dosya Güvenliği:**
-   * Dosyalar güvenli `<App_Home>/Documents/Downloads/` dizinine yazılır.
-   * Path traversal saldırılarına (`../`, `..\`) ve null byte enjeksiyonlarına karşı sıkı dosya adı sanitizasyonu uygulanır.
-   * Çakışan dosya isimlerinde otomatik indeksleme (`dosya (1).ext`) yapılır; mevcut dosyaların üzerine kazara yazılmaz.
-   * Nihai hedefin sandboxed indirme dizini dışına taşmadığı `standardizedFileURL.path` ile doğrulanır.
-3. **İlerleme Takibi ve İptal:**
-   * `WKDownload.progress` (`Progress`) üzerinden KVO ile anlık yüzde hesaplanır.
-   * `cancelDownload(id:)` API'si ile devam eden indirmeler iptal edilebilir ve yarım kalan dosyalar temizlenir.
-4. **V4.1 Güvenlik İzolasyonunun Korunması:**
-   * `WKContentWorld.world(name: "NativeBridge")` ve `.page` dünyası ayrımı, `frameInfo.securityOrigin` kontrolleri ve kalıcı çerez/depolama mimarisi aynen korunmaktadır.
+### V4.3 Temel Yenilikleri:
+1. **`BrowserTab` ve `BrowserTabManager` Modülü:**
+   * Her sekme kendi `id: UUID`, `NativeBrowser` örneği, `displayTitle` ve yaşam döngüsüne sahiptir.
+   * `BrowserTabManager`, tüm sekmelerin bellek yönetimini, aktif sekme değişimini (`activateTab(id:)`), sekme kapatmayı (`closeTab(id:)`) ve yeni sekme üretimini (`createTab(url:)`) yönetir.
+   * Son sekme kapatıldığında sistemin boş kalmaması için otomatik olarak temiz bir varsayılan sekme (`https://example.com`) açılır.
+2. **WebKit Popup Delegasyonu (`createWebViewWith`):**
+   * WebKit tarafından sağlanan özel `configuration` nesnesi doğrudan yeni açılan sekmenin `NativeBrowser` örneğine geçirilir.
+   * Bu sayede `target="_blank"` form POST verileri (POST body), HTTP header akışları ve `window.opener` JS köprüsü kesilmeden yeni sekmeye taşınır.
+3. **Paylaşımlı `WKProcessPool` & `WKWebsiteDataStore`:**
+   * Tüm sekmeler statik `BrowserTabManager.sharedProcessPool` ve `WKWebsiteDataStore.default()` paylaşır.
+   * Aynı origin altındaki sekmeler arasında `localStorage` ve çerezler anlık olarak senkronize kalır.
+4. **`window.close()` Kendi Kendini Kapatma:**
+   * Sayfa içi JavaScript `window.close()` çağırdığında `BrowserUIDelegate.webViewDidClose` tetiklenir ve ilgili sekme `tabManager.closeTab(id:)` ile otomatik olarak bellekten kaldırılır.
+5. **Modern UIKit Sekme Çubuğu (Tab Bar):**
+   * URL çubuğu altında yatay kaydırılabilir sade bir sekme barı (`tabBarScrollView`).
+   * Her sekme için başlık, seçilme durumu (aktif sekmede mavi vurgulama), hızlı kapatma butonu (`✕`) ve yeni sekme ekleme butonu (`＋`).
+6. **V4.1 & V4.2 Yeteneklerinin Korunması:**
+   * `WKContentWorld.world(name: "NativeBridge")` izole bridge mimarisi, `WKDownload` indirme motoru, çerez denetimi ve OOM çöküş dayanıklılığı tüm sekmelerde bağımsız olarak çalışır.
 
 ---
 
@@ -55,82 +55,65 @@ BrowserNavigationDelegate: decidePolicyFor navigationResponse
 ```text
 NativeWKWebViewTest/
 ├── NativeWKWebViewTest.xcodeproj/
-│   ├── project.pbxproj                           # Xcode proje dosyası (Browser modülü ve Download motoru kayıtlı)
+│   ├── project.pbxproj                           # Xcode proje dosyası (TabManager & Browser modülü kayıtlı)
 │   └── xcshareddata/
 │       └── xcschemes/
 │           └── NativeWKWebViewTest.xcscheme      # CI/CD için paylaşımlı build şeması
 ├── NativeWKWebViewTest/
-│   ├── Browser/                                  # V4.2 Modüler Tarayıcı Motoru
+│   ├── Browser/                                  # V4.3 Modüler Tarayıcı Motoru
+│   │   ├── BrowserTab.swift                      # Sekme modeli ve durum soyutlaması
+│   │   ├── BrowserTabManager.swift               # Çok sekmeli yaşam döngüsü ve popup yöneticisi
 │   │   ├── NativeBrowser.swift                   # WKWebView sarmalayıcı, WKContentWorld & public API
 │   │   ├── BrowserState.swift                    # BrowserState, BrowserEvent, Politikalar
 │   │   ├── BrowserDownload.swift                 # BrowserDownload modeli ve DownloadState
 │   │   ├── BrowserDownloadManager.swift          # WKDownloadDelegate & dosya sistemi yöneticisi
 │   │   ├── BrowserNavigationDelegate.swift       # WKNavigationDelegate & Download kararları
-│   │   ├── BrowserUIDelegate.swift               # WKUIDelegate implementasyonu & Dialog protokolü
+│   │   ├── BrowserUIDelegate.swift               # WKUIDelegate implementasyonu & Popup delegasyonu
 │   │   └── BrowserLogger.swift                   # Thread-safe teşhis loglama motoru
 │   ├── AppDelegate.swift                         # iOS uygulama yaşam döngüsü
 │   ├── SceneDelegate.swift                       # Programmatik UIWindow & NavigationController
-│   ├── ViewController.swift                      # Test Harness UI (NativeBrowser & Download testleri)
+│   ├── ViewController.swift                      # Test Harness UI (Tab Bar & Test Suites)
 │   └── Info.plist                                # Güvenlik & Scene tanımları
 ├── codemagic.yaml                                # Codemagic macOS M2 build konfigürasyonu
 ├── CODEMAGIC_SETUP.md                            # Codemagic paneli adım adım kurulum rehberi
 ├── V4_WEBKIT_RESEARCH.md                         # Kapsamlı V4 araştırma ve yol haritası dokümanı
 ├── V4.2_DOWNLOAD_RESEARCH.md                     # V4.2 WKDownload teknik araştırma dokümanı
+├── V4.3_MULTITAB_RESEARCH.md                     # V4.3 Çok sekmeli mimari ve popup araştırma dokümanı
 └── README.md                                     # Proje dokümantasyonu
 ```
 
 ---
 
-## 3. NativeBrowser Public API (V4.2)
+## 3. BrowserTabManager Public API (V4.3)
 
 ```swift
-// Gezinme ve Kontrol
-open(url: URL)
-open(urlString: String)
-close()
-back()
-forward()
-reload()
-getState() -> BrowserState
+// Sekme Yönetimi
+@discardableResult
+func createTab(url: URL?, activate: Bool, customConfiguration: WKWebViewConfiguration?) -> BrowserTab
+func closeTab(id: UUID)
+func activateTab(id: UUID)
+func tab(for id: UUID) -> BrowserTab?
 
-// İndirme Motoru Kontrolleri
-var downloadManager: BrowserDownloadManager { get }
-getDownloads() -> [BrowserDownload]
-cancelDownload(id: UUID)
+// Popup Interception
+func handlePopupRequest(configuration: WKWebViewConfiguration, navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView?
 
-// Yerleşim ve Görünürlük (Gelecekteki Obsidian Overlay için)
-setFrame(_ frame: CGRect)
-setVisible(_ visible: Bool)
-
-// Politikalar
-setTargetBlankPolicy(_ policy: TargetBlankPolicy) // .rerouteSameView | .block
-setCustomSchemePolicy(_ policy: CustomSchemePolicy) // .observeOnly | .blockExternal
-
-// İki Yönlü Etkileşim & Depolama
-evaluateJavaScript(script, in: contentWorld, completion:)
-inspectCookies(completion:)
-clearWebsiteData(completion:)
-
-// Reaktif Durum ve Olay Dinleyicileri
-var onStateChanged: ((BrowserState) -> Void)?
-var onEvent: ((BrowserEvent) -> Void)?
+// Dinleyiciler
+var onTabsChanged: (([BrowserTab]) -> Void)?
+var onActiveTabChanged: ((BrowserTab?) -> Void)?
+var onDownloadUpdated: ((BrowserDownload) -> Void)?
 ```
 
 ---
 
-## 4. Korunan Davranışlar ve Sınır Durumlar
+## 4. V4.3 Çok Sekmeli Test Sayfası Özellikleri
 
-1. **Ağ ve Güvenlik Denetimi (`BrowserNavigationDelegate`):**
-   * İstek tipi ayrıştırması (`linkActivated`, `formSubmitted`, `backForward`, `reload`, `formResubmitted`, `other`).
-   * HTTP yanıt kodu (`200`, `301`, `302`, `404` vb.) ve MIME type loglaması.
-   * Sunucu güvenlik başlıkları (`X-Frame-Options`, `Content-Security-Policy`, `Set-Cookie`, `Content-Disposition`) denetimi.
-   * SSL & Sunucu sertifikası kimlik doğrulama zorlukları (`didReceive challenge`).
-2. **Çöküş Dayanıklılığı (Crash Resiliency):**
-   * `webContentProcessDidTerminate` yakalanır; ilk crash'te reload, 3 saniye içinde peş peşe crash yaşanırsa CPU kilidini engellemek için durdurma.
-3. **Popup (`target="_blank"`, `window.open()`) Yakalama:**
-   * `createWebViewWith` yeni sekme isteklerini yakalar; `rerouteSameView` modunda mevcut sayfada açar.
-4. **Universal Links & App Handoff Durumu:**
-   * Bu sürümde (V4.2) Universal Link bypass mekanizması henüz implement edilmemiştir; V4.4 kapsamında gerçek iPad üzerinde test edilecektir.
+`📑 Test Multi-Tab` butonu tıklandığında aşağıdaki test senaryolarını içeren özel yerel harness yüklenir:
+1. **Standart `target="_blank"`:** Bağlantının yeni bir sekmede açılması.
+2. **`window.open()` (Anlık):** Kullanıcı tıklamasıyla senkron popup sekmesi oluşturma.
+3. **`window.open()` (1000ms Gecikmeli):** Asenkron zamanlayıcı (`setTimeout`) ardından WebKit popup yakalama kontrolü.
+4. **Form POST to New Tab:** `method="POST"` ve `target="_blank"` ile gönderilen form verisinin (POST body) yeni sekmeye taşınması.
+5. **Shared Storage & Cookies:** Bir sekmede yazılan `localStorage` ve `document.cookie` verisinin diğer sekmelerde okunabilmesi.
+6. **`window.close()`:** Sayfa içi script ile aktif sekmenin kendini kapatabilmesi.
 
 ---
 

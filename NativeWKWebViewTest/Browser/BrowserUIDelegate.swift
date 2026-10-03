@@ -27,6 +27,13 @@ public final class BrowserUIDelegate: NSObject, WKUIDelegate {
         let targetUrlStr = targetUrl?.absoluteString ?? "unknown"
         BrowserLogger.shared.log(.ui, "Intercepted window.open / target=_blank for URL: \(targetUrlStr)")
 
+        // If tabManager is available, route to new tab preserving WebKit configuration & POST body
+        if let tabManager = browser.tabManager {
+            BrowserLogger.shared.log(.ui, "Routing popup to BrowserTabManager as a new tab")
+            browser.emitEvent(.popupRequested(url: targetUrl, policy: .rerouteSameView))
+            return tabManager.handlePopupRequest(configuration: configuration, navigationAction: navigationAction, windowFeatures: windowFeatures)
+        }
+
         if navigationAction.targetFrame == nil {
             if browser.state.targetBlankPolicy == .rerouteSameView {
                 BrowserLogger.shared.log(.ui, "Policy REROUTE: Loading target=_blank in same WKWebView")
@@ -43,6 +50,11 @@ public final class BrowserUIDelegate: NSObject, WKUIDelegate {
     // 2. window.close()
     public func webViewDidClose(_ webView: WKWebView) {
         BrowserLogger.shared.log(.ui, "EVENT: window.close() invoked by web content")
+        if let tabManager = browser?.tabManager,
+           let currentTab = tabManager.tabs.first(where: { $0.browser.webView === webView }) {
+            BrowserLogger.shared.log(.ui, "Closing tab [\(currentTab.id.uuidString.prefix(6))] due to window.close()")
+            tabManager.closeTab(id: currentTab.id)
+        }
     }
 
     // 3. JavaScript alert()

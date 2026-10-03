@@ -1,11 +1,16 @@
 import UIKit
 import WebKit
 
-/// Main Test Harness UI hosting the V3 NativeBrowser engine
+/// Main Test Harness UI hosting the V4.3 Multi-Tab NativeBrowser engine
 class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPresenter {
 
-    // MARK: - Core Browser Engine
-    private var browser: NativeBrowser!
+    // MARK: - Core Browser Engine & Tab Management
+    private var tabManager: BrowserTabManager!
+    private let webContainerView = UIView()
+
+    private var activeBrowser: NativeBrowser? {
+        return tabManager.activeTab?.browser
+    }
 
     // MARK: - UI Components
     private let progressView = UIProgressView(progressViewStyle: .bar)
@@ -16,6 +21,11 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
     private let reloadButton = UIButton(type: .system)
     private let sslBadgeLabel = UILabel()
     private let statusLabel = UILabel()
+
+    // Multi-Tab Bar UI
+    private let tabBarScrollView = UIScrollView()
+    private let tabStackView = UIStackView()
+    private let newTabButton = UIButton(type: .system)
 
     // Control Bars
     private let testUrlsScrollView = UIScrollView()
@@ -32,7 +42,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
     private var isLogExpanded = false
     private var logHeightConstraint: NSLayoutConstraint?
 
-    // MARK: - Quick Test Sites
+    // Quick Test Sites
     private let testURLs = [
         "https://example.com",
         "https://www.google.com",
@@ -44,43 +54,49 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Native WKWebView V3 Engine"
+        title = "Native WKWebView V4.3 Engine"
         view.backgroundColor = .systemBackground
 
-        setupBrowser()
+        setupBrowserTabManager()
         setupTopControls()
+        setupTabBarUI()
         setupQuickTestBar()
         setupActionToolbar()
         setupLogConsole()
         setupLayout()
         setupLoggerBinding()
 
-        BrowserLogger.shared.log(.state, "V3 Browser-Engine Test Harness initialized.")
-        BrowserLogger.shared.log(.state, "WebsiteDataStore: persistent (cookies & storage active).")
-        BrowserLogger.shared.log(.state, "JS Bridge active: capturing console.log & NativeEngine messages.")
+        BrowserLogger.shared.log(.state, "V4.3 Multi-Tab Browser Engine initialized.")
+        BrowserLogger.shared.log(.state, "Shared WKProcessPool & WebsiteDataStore active.")
+        BrowserLogger.shared.log(.state, "Ready for target='_blank', window.open(), and tab management.")
 
-        browser.open("https://example.com")
+        // Create initial default tab
+        tabManager.createTab(url: URL(string: "https://example.com"), activate: true)
     }
 
-    // MARK: - Setup Browser Engine
-    private func setupBrowser() {
-        browser = NativeBrowser()
-        browser.dialogPresenter = self
+    // MARK: - Setup Tab Manager & Browser Engine
+    private func setupBrowserTabManager() {
+        webContainerView.translatesAutoresizingMaskIntoConstraints = false
+        webContainerView.backgroundColor = .systemBackground
+        view.addSubview(webContainerView)
 
-        let browserView = browser.view
-        browserView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(browserView)
+        tabManager = BrowserTabManager(containerView: webContainerView)
+        tabManager.dialogPresenter = self
 
-        browser.onStateChanged = { [weak self] state in
+        tabManager.onTabsChanged = { [weak self] tabs in
             guard let self = self else { return }
-            self.updateUI(with: state)
+            self.rebuildTabBar(tabs: tabs)
         }
 
-        browser.onEvent = { event in
-            // Events can trigger diagnostics or sound/haptics if needed
+        tabManager.onActiveTabChanged = { [weak self] activeTab in
+            guard let self = self else { return }
+            if let tab = activeTab {
+                self.updateUI(with: tab.browser.state)
+            }
+            self.rebuildTabBar(tabs: self.tabManager.tabs)
         }
 
-        browser.downloadManager.onDownloadUpdated = { [weak self] download in
+        tabManager.onDownloadUpdated = { [weak self] download in
             guard let self = self else { return }
             let pct = Int(download.progress * 100)
             switch download.state {
@@ -166,6 +182,106 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         progressView.tintColor = .systemBlue
     }
 
+    // MARK: - Setup Multi-Tab Bar UI
+    private func setupTabBarUI() {
+        tabBarScrollView.showsHorizontalScrollIndicator = false
+        tabBarScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        tabStackView.axis = .horizontal
+        tabStackView.spacing = 6
+        tabStackView.alignment = .center
+        tabStackView.translatesAutoresizingMaskIntoConstraints = false
+        tabBarScrollView.addSubview(tabStackView)
+
+        newTabButton.setTitle(" ＋ ", for: .normal)
+        newTabButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .bold)
+        newTabButton.backgroundColor = .secondarySystemBackground
+        newTabButton.layer.cornerRadius = 6
+        newTabButton.translatesAutoresizingMaskIntoConstraints = false
+        newTabButton.addTarget(self, action: #selector(newTabTapped), for: .touchUpInside)
+
+        NSLayoutConstraint.activate([
+            tabStackView.topAnchor.constraint(equalTo: tabBarScrollView.topAnchor),
+            tabStackView.bottomAnchor.constraint(equalTo: tabBarScrollView.bottomAnchor),
+            tabStackView.leadingAnchor.constraint(equalTo: tabBarScrollView.leadingAnchor, constant: 6),
+            tabStackView.trailingAnchor.constraint(equalTo: tabBarScrollView.trailingAnchor, constant: -6),
+            tabStackView.heightAnchor.constraint(equalTo: tabBarScrollView.heightAnchor)
+        ])
+    }
+
+    private func rebuildTabBar(tabs: [BrowserTab]) {
+        for subview in tabStackView.arrangedSubviews {
+            tabStackView.removeArrangedSubview(subview)
+            subview.removeFromSuperview()
+        }
+
+        for tab in tabs {
+            let tabPill = makeTabPill(for: tab)
+            tabStackView.addArrangedSubview(tabPill)
+        }
+
+        // Add '+' button at the end
+        tabStackView.addArrangedSubview(newTabButton)
+    }
+
+    private func makeTabPill(for tab: BrowserTab) -> UIView {
+        let pillView = UIView()
+        pillView.translatesAutoresizingMaskIntoConstraints = false
+        pillView.layer.cornerRadius = 8
+        pillView.layer.masksToBounds = true
+
+        let isActive = (tab.id == tabManager.activeTab?.id)
+        if isActive {
+            pillView.backgroundColor = .systemBlue
+        } else {
+            pillView.backgroundColor = .secondarySystemBackground
+        }
+
+        // Title Button (Tapping switches tab)
+        let titleButton = UIButton(type: .system)
+        let titleText = tab.displayTitle.count > 16 ? String(tab.displayTitle.prefix(14)) + "…" : tab.displayTitle
+        titleButton.setTitle(titleText, for: .normal)
+        titleButton.titleLabel?.font = .systemFont(ofSize: 12, weight: isActive ? .semibold : .regular)
+        titleButton.setTitleColor(isActive ? .white : .label, for: .normal)
+        titleButton.contentHorizontalAlignment = .left
+        titleButton.translatesAutoresizingMaskIntoConstraints = false
+        titleButton.addAction(UIAction { [weak self] _ in
+            self?.tabManager.activateTab(id: tab.id)
+        }, for: .touchUpInside)
+
+        // Close Button ('✕')
+        let closeButton = UIButton(type: .system)
+        closeButton.setTitle("✕", for: .normal)
+        closeButton.titleLabel?.font = .systemFont(ofSize: 11, weight: .bold)
+        closeButton.setTitleColor(isActive ? .white.withAlphaComponent(0.85) : .secondaryLabel, for: .normal)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.addAction(UIAction { [weak self] _ in
+            self?.tabManager.closeTab(id: tab.id)
+        }, for: .touchUpInside)
+
+        pillView.addSubview(titleButton)
+        pillView.addSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            pillView.heightAnchor.constraint(equalToConstant: 28),
+
+            titleButton.leadingAnchor.constraint(equalTo: pillView.leadingAnchor, constant: 8),
+            titleButton.centerYAnchor.constraint(equalTo: pillView.centerYAnchor),
+            titleButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
+
+            closeButton.trailingAnchor.constraint(equalTo: pillView.trailingAnchor, constant: -6),
+            closeButton.centerYAnchor.constraint(equalTo: pillView.centerYAnchor),
+            closeButton.widthAnchor.constraint(equalToConstant: 20),
+            closeButton.heightAnchor.constraint(equalToConstant: 20)
+        ])
+
+        return pillView
+    }
+
+    @objc private func newTabTapped() {
+        tabManager.createTab(url: URL(string: "https://example.com"), activate: true)
+    }
+
     // MARK: - Setup Quick Test Bar
     private func setupQuickTestBar() {
         testUrlsScrollView.showsHorizontalScrollIndicator = false
@@ -194,7 +310,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
             btn.layer.cornerRadius = 6
             btn.addAction(UIAction { [weak self] _ in
                 self?.urlTextField.text = url
-                self?.browser.open(url)
+                self?.activeBrowser?.open(url)
             }, for: .touchUpInside)
             stack.addArrangedSubview(btn)
         }
@@ -221,28 +337,28 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
 
         // 1. target="_blank" Policy Toggle
         let targetBlankBtn = UIButton(type: .system)
-        targetBlankBtn.setTitle(" _blank: \(browser.state.targetBlankPolicy.rawValue) ", for: .normal)
+        targetBlankBtn.setTitle(" _blank Policy ", for: .normal)
         targetBlankBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
         targetBlankBtn.backgroundColor = .secondarySystemBackground
         targetBlankBtn.layer.cornerRadius = 6
         targetBlankBtn.addAction(UIAction { [weak self, weak targetBlankBtn] _ in
-            guard let self = self else { return }
-            let next: TargetBlankPolicy = (self.browser.state.targetBlankPolicy == .rerouteSameView) ? .block : .rerouteSameView
-            self.browser.setTargetBlankPolicy(next)
+            guard let self = self, let browser = self.activeBrowser else { return }
+            let next: TargetBlankPolicy = (browser.state.targetBlankPolicy == .rerouteSameView) ? .block : .rerouteSameView
+            browser.setTargetBlankPolicy(next)
             targetBlankBtn?.setTitle(" _blank: \(next.rawValue) ", for: .normal)
         }, for: .touchUpInside)
         stack.addArrangedSubview(targetBlankBtn)
 
         // 2. Custom Scheme Policy Toggle
         let schemeBtn = UIButton(type: .system)
-        schemeBtn.setTitle(" Schemes: \(browser.state.customSchemePolicy.rawValue) ", for: .normal)
+        schemeBtn.setTitle(" Scheme Policy ", for: .normal)
         schemeBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
         schemeBtn.backgroundColor = .secondarySystemBackground
         schemeBtn.layer.cornerRadius = 6
         schemeBtn.addAction(UIAction { [weak self, weak schemeBtn] _ in
-            guard let self = self else { return }
-            let next: CustomSchemePolicy = (self.browser.state.customSchemePolicy == .observeOnly) ? .blockExternal : .observeOnly
-            self.browser.setCustomSchemePolicy(next)
+            guard let self = self, let browser = self.activeBrowser else { return }
+            let next: CustomSchemePolicy = (browser.state.customSchemePolicy == .observeOnly) ? .blockExternal : .observeOnly
+            browser.setCustomSchemePolicy(next)
             schemeBtn?.setTitle(" Schemes: \(next.rawValue) ", for: .normal)
         }, for: .touchUpInside)
         stack.addArrangedSubview(schemeBtn)
@@ -254,7 +370,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         cookiesBtn.backgroundColor = .secondarySystemBackground
         cookiesBtn.layer.cornerRadius = 6
         cookiesBtn.addAction(UIAction { [weak self] _ in
-            self?.browser.inspectCookies { _ in }
+            self?.activeBrowser?.inspectCookies { _ in }
         }, for: .touchUpInside)
         stack.addArrangedSubview(cookiesBtn)
 
@@ -265,7 +381,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         clearDataBtn.backgroundColor = .secondarySystemBackground
         clearDataBtn.layer.cornerRadius = 6
         clearDataBtn.addAction(UIAction { [weak self] _ in
-            self?.browser.clearWebsiteData()
+            self?.activeBrowser?.clearWebsiteData()
         }, for: .touchUpInside)
         stack.addArrangedSubview(clearDataBtn)
 
@@ -280,7 +396,18 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         }, for: .touchUpInside)
         stack.addArrangedSubview(evalBtn)
 
-        // 6. Test LocalStorage & Cookies
+        // 6. Test Multi-Tab Suite (V4.3)
+        let testMultiTabBtn = UIButton(type: .system)
+        testMultiTabBtn.setTitle(" 📑 Test Multi-Tab ", for: .normal)
+        testMultiTabBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
+        testMultiTabBtn.backgroundColor = .systemBlue.withAlphaComponent(0.15)
+        testMultiTabBtn.layer.cornerRadius = 6
+        testMultiTabBtn.addAction(UIAction { [weak self] _ in
+            self?.loadMultiTabTestPage()
+        }, for: .touchUpInside)
+        stack.addArrangedSubview(testMultiTabBtn)
+
+        // 7. Test LocalStorage & Cookies
         let testStorageBtn = UIButton(type: .system)
         testStorageBtn.setTitle(" 💾 Test Storage ", for: .normal)
         testStorageBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
@@ -291,7 +418,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         }, for: .touchUpInside)
         stack.addArrangedSubview(testStorageBtn)
 
-        // 7. Test Downloads
+        // 8. Test Downloads
         let testDownloadBtn = UIButton(type: .system)
         testDownloadBtn.setTitle(" 📥 Test Downloads ", for: .normal)
         testDownloadBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
@@ -355,6 +482,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         view.addSubview(topBarStack)
         view.addSubview(statusLabel)
         view.addSubview(progressView)
+        view.addSubview(tabBarScrollView)
         view.addSubview(testUrlsScrollView)
         view.addSubview(actionsScrollView)
         view.addSubview(logHeaderStack)
@@ -387,23 +515,29 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
             progressView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             progressView.heightAnchor.constraint(equalToConstant: 2),
 
+            // Multi-Tab Bar UI
+            tabBarScrollView.topAnchor.constraint(equalTo: progressView.bottomAnchor, constant: 4),
+            tabBarScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabBarScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabBarScrollView.heightAnchor.constraint(equalToConstant: 32),
+
             // Quick Test URLs Bar
-            testUrlsScrollView.topAnchor.constraint(equalTo: progressView.bottomAnchor, constant: 4),
+            testUrlsScrollView.topAnchor.constraint(equalTo: tabBarScrollView.bottomAnchor, constant: 4),
             testUrlsScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             testUrlsScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            testUrlsScrollView.heightAnchor.constraint(equalToConstant: 32),
+            testUrlsScrollView.heightAnchor.constraint(equalToConstant: 30),
 
             // Action Toolbar
             actionsScrollView.topAnchor.constraint(equalTo: testUrlsScrollView.bottomAnchor, constant: 4),
             actionsScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             actionsScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            actionsScrollView.heightAnchor.constraint(equalToConstant: 32),
+            actionsScrollView.heightAnchor.constraint(equalToConstant: 30),
 
-            // Native Browser View
-            browser.view.topAnchor.constraint(equalTo: actionsScrollView.bottomAnchor, constant: 4),
-            browser.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            browser.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            browser.view.bottomAnchor.constraint(equalTo: logHeaderStack.topAnchor, constant: -4),
+            // Web Container View (Hosting all active and hidden WKWebViews)
+            webContainerView.topAnchor.constraint(equalTo: actionsScrollView.bottomAnchor, constant: 4),
+            webContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            webContainerView.bottomAnchor.constraint(equalTo: logHeaderStack.topAnchor, constant: -4),
 
             // Log Console Header
             logHeaderStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
@@ -419,24 +553,24 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         ])
     }
 
-    // MARK: - Actions
+    // MARK: - Navigation Actions
     @objc private func goTapped() {
         urlTextField.resignFirstResponder()
         if let text = urlTextField.text {
-            browser.open(text)
+            activeBrowser?.open(text)
         }
     }
 
     @objc private func backTapped() {
-        browser.back()
+        activeBrowser?.back()
     }
 
     @objc private func forwardTapped() {
-        browser.forward()
+        activeBrowser?.forward()
     }
 
     @objc private func reloadTapped() {
-        browser.reload()
+        activeBrowser?.reload()
     }
 
     @objc private func toggleLogView() {
@@ -483,7 +617,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         alert.addAction(UIAlertAction(title: "Execute", style: .default, handler: { [weak self] _ in
             guard let self = self, let code = alert.textFields?.first?.text, !code.isEmpty else { return }
             BrowserLogger.shared.log(.js, "Eval: \(code)")
-            self.browser.evaluateJavaScript(code) { result in
+            self.activeBrowser?.evaluateJavaScript(code) { result in
                 switch result {
                 case .success(let val):
                     BrowserLogger.shared.log(.js, "Result: \(val ?? "undefined / void")")
@@ -493,6 +627,102 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
             }
         }))
         present(alert, animated: true)
+    }
+
+    // MARK: - Test Suites
+    private func loadMultiTabTestPage() {
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>V4.3 Multi-Tab Test Suite</title>
+            <style>
+                body { font-family: -apple-system, sans-serif; padding: 20px; line-height: 1.6; }
+                .card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+                a.btn, button, input[type=submit] { display: inline-block; padding: 8px 14px; background: #007aff; color: #fff; text-decoration: none; border-radius: 6px; border: none; font-size: 13px; margin-top: 6px; cursor: pointer; }
+                h4 { margin: 0 0 6px 0; }
+                p { margin: 0; font-size: 13px; color: #555; }
+                .result { margin-top: 8px; font-family: monospace; font-size: 12px; background: #eee; padding: 6px; border-radius: 4px; }
+            </style>
+        </head>
+        <body>
+            <h3>V4.3 Multi-Tab & Window Test Suite</h3>
+            <p style="margin-bottom: 16px;">Test popup interception, target="_blank", POST body forwarding, shared cookies, and window.close().</p>
+
+            <div class="card">
+                <h4>1. target="_blank" Link</h4>
+                <p>Standard hyperlink with target="_blank". Should open in a new browser tab.</p>
+                <a class="btn" href="https://example.com" target="_blank">Open example.com in New Tab</a>
+            </div>
+
+            <div class="card">
+                <h4>2. window.open() Immediate</h4>
+                <p>JavaScript window.open call triggered synchronously by user tap.</p>
+                <button onclick="window.open('https://example.com', '_blank')">Run window.open()</button>
+            </div>
+
+            <div class="card">
+                <h4>3. window.open() Delayed (1000ms)</h4>
+                <p>Testing popup creation after asynchronous delay (setTimeout).</p>
+                <button onclick="delayedOpen()">Delayed window.open (1s)</button>
+                <div id="delayStatus" class="result" style="display:none;">Waiting 1 second...</div>
+            </div>
+
+            <div class="card">
+                <h4>4. Form POST to New Tab</h4>
+                <p>Form submission with method="POST" and target="_blank". Verifies POST body preservation across tabs.</p>
+                <form action="https://httpbin.org/post" method="POST" target="_blank">
+                    <input type="hidden" name="testKey" value="V4.3_MultiTab_Form_Value">
+                    <input type="hidden" name="submittedAt" value="Obsidian_Native_Browser">
+                    <input type="submit" value="Submit POST Form to New Tab">
+                </form>
+            </div>
+
+            <div class="card">
+                <h4>5. Shared Storage & Cookies Across Tabs</h4>
+                <p>Verify that localStorage and cookies are shared in real-time between tabs under the shared WKProcessPool.</p>
+                <button onclick="writeSharedData()">Write Shared Token</button>
+                <button onclick="readSharedData()">Read Shared Token</button>
+                <div id="storageResult" class="result">Storage output will appear here</div>
+            </div>
+
+            <div class="card">
+                <h4>6. window.close() Self-Termination</h4>
+                <p>Attempts to close current tab via JavaScript window.close().</p>
+                <button onclick="window.close()" style="background:#dc3545;">Execute window.close()</button>
+            </div>
+
+            <script>
+                function delayedOpen() {
+                    const st = document.getElementById('delayStatus');
+                    st.style.display = 'block';
+                    st.innerText = 'Timer started: window.open in 1s...';
+                    setTimeout(function() {
+                        st.innerText = 'Opening popup window now...';
+                        window.open('https://example.com', '_blank');
+                    }, 1000);
+                }
+
+                function writeSharedData() {
+                    const stamp = 'tab_token_' + Date.now();
+                    localStorage.setItem('v43_shared_token', stamp);
+                    document.cookie = 'v43_cookie=' + encodeURIComponent(stamp) + '; path=/; max-age=86400';
+                    document.getElementById('storageResult').innerText = 'Written: ' + stamp + '\\nNow open a new tab or switch tabs to read it!';
+                    console.log('Wrote shared token:', stamp);
+                }
+
+                function readSharedData() {
+                    const token = localStorage.getItem('v43_shared_token');
+                    const cookie = document.cookie;
+                    document.getElementById('storageResult').innerText = 'LS Token: ' + token + '\\nCookie: ' + cookie;
+                    console.log('Read shared token:', token);
+                }
+            </script>
+        </body>
+        </html>
+        """
+        activeBrowser?.loadHTMLString(html, baseURL: URL(string: "https://local-test.poc/"))
     }
 
     private func loadStorageTestPage() {
@@ -530,7 +760,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         </body>
         </html>
         """
-        browser.loadHTMLString(html, baseURL: URL(string: "https://local-test.poc/"))
+        activeBrowser?.loadHTMLString(html, baseURL: URL(string: "https://local-test.poc/"))
     }
 
     private func loadDownloadTestPage() {
@@ -606,7 +836,7 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         </body>
         </html>
         """
-        browser.loadHTMLString(html, baseURL: URL(string: "https://local-test.poc/"))
+        activeBrowser?.loadHTMLString(html, baseURL: URL(string: "https://local-test.poc/"))
     }
 
     // MARK: - UITextFieldDelegate
