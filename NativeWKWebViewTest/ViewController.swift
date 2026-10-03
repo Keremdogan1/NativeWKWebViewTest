@@ -447,10 +447,10 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
         runSanityBtn.layer.cornerRadius = 6
         runSanityBtn.addAction(UIAction { [weak self] _ in
             guard let self = self else { return }
-            self.statusLabel.text = "Running local sanity tests..."
-            TestHarnessEngine.shared.runAutomatedStorageAndSchemeTests(tabManager: self.tabManager) {
+            self.statusLabel.text = "Running local runtime sanity tests..."
+            TestHarnessEngine.shared.runAllAutomatedRuntimeTests(tabManager: self.tabManager) {
                 DispatchQueue.main.async {
-                    self.statusLabel.text = "Local sanity tests complete. Check Dashboard / Logs."
+                    self.statusLabel.text = "Runtime tests complete. Check Dashboard / Logs."
                 }
             }
         }, for: .touchUpInside)
@@ -469,19 +469,10 @@ class ViewController: UIViewController, UITextFieldDelegate, BrowserUIDialogPres
     }
 
     private func showTestResultsModal() {
-        let cases = TestHarnessEngine.shared.testCases
-        var report = "V4.3 WEBKIT TEST RESULTS SUMMARY\n\n"
-        for tc in cases {
-            report += "[\(tc.id)] \(tc.title): [\(tc.status.rawValue)]\n"
-            report += "   Evidence: \(tc.evidence)\n"
-            report += "   Real iPad: \(tc.requiresRealDevice ? "YES" : "NO")\n\n"
-        }
-        let alert = UIAlertController(title: "Test Suite Results", message: report, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Copy / OK", style: .default, handler: { _ in
-            UIPasteboard.general.string = report
-            BrowserLogger.shared.log(.test, "Test results copied to clipboard.")
-        }))
-        present(alert, animated: true)
+        let testVC = TestHarnessViewController(tabManager: tabManager)
+        let nav = UINavigationController(rootViewController: testVC)
+        nav.modalPresentationStyle = .pageSheet
+        present(nav, animated: true)
     }
 
     // MARK: - Setup Diagnostic Log Console

@@ -36,7 +36,7 @@ public final class BrowserUIDelegate: NSObject, WKUIDelegate {
             if navigationAction.navigationType == .linkActivated {
                 TestHarnessEngine.shared.record(id: "B", status: .passRuntime, evidence: "createWebViewWith intercepted linkActivated -> new BrowserTab spawned")
             } else if navigationAction.navigationType == .formSubmitted {
-                TestHarnessEngine.shared.record(id: "C", status: .unknown, evidence: "Observed formSubmitted POST target=_blank routed to new tab; waiting for local HTTP server payload")
+                TestHarnessEngine.shared.record(id: "C", status: .readyDevice, evidence: "Observed formSubmitted POST target=_blank routed to new tab; waiting for local HTTP server payload")
             } else if navigationAction.navigationType == .other {
                 TestHarnessEngine.shared.record(id: "D", status: .passRuntime, evidence: "createWebViewWith intercepted window.open() -> new BrowserTab spawned")
                 if targetUrlStr.contains("mode=delayed") {

@@ -80,6 +80,7 @@ NativeWKWebViewTest/
 │   │   │   └── test_download.html                # Sandboxed indirme fixture'ları
 │   │   ├── WebFixturesProvider.swift             # Gömülü/çevrimdışı fixture sağlayıcısı
 │   │   ├── TestHarnessEngine.swift               # Test orkestrasyonu, kanıt ve raporlama
+│   │   ├── TestHarnessViewController.swift       # Fiziksel iPad için interaktif test harness UI
 │   │   └── EmbeddedHttpServer.swift              # Network.framework 127.0.0.1 gömülü HTTP sunucusu (POST doğrulama)
 │   ├── AppDelegate.swift                         # iOS uygulama yaşam döngüsü
 │   ├── SceneDelegate.swift                       # Programmatik UIWindow & NavigationController
