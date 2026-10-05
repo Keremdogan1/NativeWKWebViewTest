@@ -1,0 +1,9 @@
+{
+  "id": "runtime-inspector",
+  "name": "Runtime Inspector",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "Deep runtime diagnostic tool for Obsidian iOS and Capacitor bridges.",
+  "author": "Keremdogan1",
+  "isDesktopOnly": false
+}
